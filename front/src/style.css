@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+@theme {
+  --color-base: #ffffff;
+  --color-ink: #111111;
+  --color-muted: #63625d;
+  --color-line: #e7e5e0;
+  --color-accent: #7a6a4f;
+  --color-accent-soft: #f4f0e8;
+  --font-sans: "Pretendard Variable", "Pretendard", ui-sans-serif, system-ui, -apple-system,
+    "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-base text-ink font-sans antialiased;
+}
+
+::selection {
+  background-color: var(--color-accent-soft);
+}
