@@ -1,9 +1,9 @@
 <script setup>
 import PageHero from '@/components/PageHero.vue'
 import SectionTitle from '@/components/SectionTitle.vue'
-import ContactForm from '@/components/ContactForm.vue'
+//import ContactForm from '@/components/ContactForm.vue'
 
-const supportTypes = ['개인 후원', '기업 후원', '정기 후원', '일시 후원']
+
 
 const benefits = [
   '정기연주회 초청 및 우선 예매 안내',
@@ -23,11 +23,16 @@ const benefits = [
 
     <section class="mx-auto max-w-6xl px-6 py-20 lg:px-8">
       <SectionTitle eyebrow="How" title="후원 방법" />
-      <div class="grid gap-10 sm:grid-cols-2">
-        <div v-for="type in supportTypes" :key="type" class="border border-line px-6 py-8">
-          <p class="text-sm text-ink">{{ type }}</p>
-        </div>
-      </div>
+      <ul class="divide-y divide-line">
+        <li class="p-2">
+          <p class="px-4 py-3 text-sm text-ink">정기후원</p>
+          <p class="px-4 py-3 text-sm text-muted">정기후원은 매월 일정 금액을 후원하는 방법으로, 서귀포챔버오케스트라의 안정적인 운영과 공연 기획에 큰 힘이 됩니다. 남겨주시는 연락처로 보내드리는 링크를 통해 후원약정을 해주시면 후원이 시작됩니다.</p>
+        </li>
+        <li class="p-2">
+          <p class="px-4 py-3 text-sm text-ink">일시후원</p>
+          <p class="px-4 py-3 text-sm text-muted">일시후원은 특정 이벤트나 공연에 대한 후원으로, 서귀포챔버오케스트라의 다양한 활동을 지원합니다.</p>
+        </li>
+      </ul>
 
       <div class="mt-12 max-w-md border border-line bg-accent-soft px-6 py-8">
         <p class="text-xs tracking-[0.2em] text-accent uppercase">후원 계좌</p>
@@ -48,13 +53,13 @@ const benefits = [
       </div>
     </section>
 
-    <section class="mx-auto max-w-6xl px-6 py-20 lg:px-8">
+    <!-- <section class="mx-auto max-w-6xl px-6 py-20 lg:px-8">
       <SectionTitle eyebrow="Contact" title="후원 문의" description="후원 관련 문의는 아래 연락처 또는 문의 폼을 이용해주세요." />
       <p class="mb-10 text-sm text-ink">
         <a href="mailto:support@sgpchamber.kr" class="hover:text-accent">support@sgpchamber.kr</a>
         · <a href="tel:0640000001" class="hover:text-accent">064-000-0001</a>
       </p>
       <ContactForm :type-options="supportTypes" />
-    </section>
+    </section> -->
   </div>
 </template>

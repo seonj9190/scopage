@@ -6,7 +6,7 @@ const year = new Date().getFullYear()
 const snsLinks = [
   { label: 'Instagram', href: '#' },
   { label: 'YouTube', href: '#' },
-  { label: 'Facebook', href: '#' },
+  
 ]
 </script>
 
@@ -16,11 +16,14 @@ const snsLinks = [
       <div class="flex flex-col gap-8 sm:flex-row sm:justify-between">
         <div>
           <p class="text-sm font-medium text-ink">서귀포챔버오케스트라</p>
-          <p class="mt-2 text-sm text-muted">제주특별자치도 서귀포시 · 2016년 창단</p>
-          <p class="mt-1 text-sm text-muted">
-            문의 <a href="mailto:info@sgpchamber.kr" class="hover:text-accent">info@sgpchamber.kr</a>
-            · <a href="tel:0640000000" class="hover:text-accent">064-000-0000</a>
-          </p>
+          <p class="mt-2 text-sm text-muted">제주특별자치도 서귀포시 법환상로 65</p>
+          <p class="mt-1 text-sm text-muted mt-2">문의</p>
+            <div class="my-1">
+              <a href="mailto:seogwipochamber@gmail.com" class="hover:text-accent text-ink">seogwipochamber@gmail.com</a>
+            </div>
+            <div class="my-1">
+              <a href="tel:064-000-0000" class="hover:text-accent text-ink">064-000-0000</a>
+            </div>
         </div>
 
         <nav aria-label="SNS 링크">

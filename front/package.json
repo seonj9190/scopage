@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "homepage": "https://seonj9190.github.io/scopage",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

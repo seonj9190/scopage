@@ -1,7 +1,7 @@
 <script setup>
 import PageHero from '@/components/PageHero.vue'
 import SectionTitle from '@/components/SectionTitle.vue'
-import ContactForm from '@/components/ContactForm.vue'
+//import ContactForm from '@/components/ContactForm.vue'
 
 const inquiryTypes = ['공연 예약', '협연 문의', '단체 관람', '기타 문의']
 </script>
@@ -22,7 +22,7 @@ const inquiryTypes = ['공연 예약', '협연 문의', '단체 관람', '기타
             <div>
               <dt class="text-accent">이메일</dt>
               <dd class="mt-1 text-ink">
-                <a href="mailto:concert@sgpchamber.kr" class="hover:text-accent">concert@sgpchamber.kr</a>
+                <a href="mailto:seogwipochamber@gmail.com" class="hover:text-accent">seogwipochamber@gmail.com</a>
               </dd>
             </div>
             <div>
@@ -32,16 +32,16 @@ const inquiryTypes = ['공연 예약', '협연 문의', '단체 관람', '기타
               </dd>
             </div>
             <div>
-              <dt class="text-accent">사무국</dt>
-              <dd class="mt-1 text-ink">제주특별자치도 서귀포시 중앙로 00</dd>
+              <dt class="text-accent">인스타그램</dt>
+              <dd class="mt-1 text-ink">Instagram ID</dd>
             </div>
           </dl>
         </div>
 
-        <div>
+        <!-- <div>
           <SectionTitle eyebrow="Form" title="문의 남기기" />
           <ContactForm :type-options="inquiryTypes" />
-        </div>
+        </div> -->
       </div>
     </section>
   </div>

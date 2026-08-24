@@ -24,7 +24,8 @@ import { conductor, members } from '@/data/members.js'
         <div>
           <p class="text-lg text-ink">{{ conductor.name }}</p>
           <p class="mt-1 text-sm text-accent">{{ conductor.role }}</p>
-          <p class="mt-4 max-w-xl text-sm leading-relaxed text-muted">{{ conductor.bio }}</p>
+          <p class="mt-4 max-w-xl text-sm leading-relaxed text-muted">{{ conductor.exp1 }}</p>
+          <p class="mt-2 max-w-xl text-sm leading-relaxed text-muted">{{ conductor.exp2 }}</p>
         </div>
       </div>
     </section>
@@ -42,7 +43,8 @@ import { conductor, members } from '@/data/members.js'
             />
             <p class="mt-4 text-sm text-ink">{{ member.name }}</p>
             <p class="mt-1 text-xs text-accent">{{ member.part }}</p>
-            <p class="mt-2 text-xs leading-relaxed text-muted">{{ member.bio }}</p>
+            <p class="mt-2 text-xs leading-relaxed text-muted">{{ member.exp1 }}</p>
+            <p class="mt-2 text-xs leading-relaxed text-muted">{{ member.exp2 }}</p>
           </li>
         </ul>
       </div>
