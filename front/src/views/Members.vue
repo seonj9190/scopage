@@ -13,14 +13,17 @@ import { conductor, members } from '@/data/members.js'
     />
 
     <section class="mx-auto max-w-6xl px-6 py-20 lg:px-8">
-      <SectionTitle eyebrow="Conductor" title="지휘자" />
-      <div class="grid gap-8 sm:grid-cols-[240px_1fr]">
-        <img
+      <SectionTitle eyebrow="Conductor" title="음악감독, 상임지휘" />
+      <div class="grid gap-8 sm:grid-cols-[240px_1fr] ">
+        <div class="flex items-center justify-center">
+          <img
           :src="conductor.photo"
           :alt="`${conductor.name} 프로필 사진`"
           class="aspect-[3/4] w-full max-w-xs object-cover"
           loading="lazy"
-        />
+          />
+        </div>
+
         <div>
           <p class="text-lg text-ink">{{ conductor.name }}</p>
           <p class="mt-1 text-sm text-accent">{{ conductor.role }}</p>
