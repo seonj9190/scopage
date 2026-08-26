@@ -1,10 +1,8 @@
-import express from 'express'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+const express = require('express')
+const path = require('node:path')
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const BASE_PATH = '/scopage'
-const PORT = process.env.PORT || 3000
+const BASE_PATH = '/seogwipochamber'
+const PORT = process.env.PORT || 8080
 
 const app = express()
 
