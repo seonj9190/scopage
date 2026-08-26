@@ -22,7 +22,7 @@ export const members = [
     part: '바이올린',
     exp1: '',
     exp2: '',
-    photo: 'https://seogwipochamber.org/img/hsa01.jpg',
+    photo: 'http://seogwipochamber.org/img/hsa01.jpg',
   },
   {
     id: 3,
