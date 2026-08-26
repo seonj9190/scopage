@@ -28,7 +28,7 @@ export const members = [
     id: 3,
     name: '김가을',
     part: '첼로',
-    exp1: '제주 지역 문화예술회관 상주 단체 활동 경력이 있다.',
+    exp1: '',
     exp2: '',
     photo: 'https://picsum.photos/seed/sgp-member-03/480/560',
   },

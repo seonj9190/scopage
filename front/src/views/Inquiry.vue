@@ -28,12 +28,14 @@ const inquiryTypes = ['공연 예약', '협연 문의', '단체 관람', '기타
             <div>
               <dt class="text-accent">전화</dt>
               <dd class="mt-1 text-ink">
-                <a href="tel:0640000000" class="hover:text-accent">064-000-0000</a> (평일 10:00 - 17:00)
+                <a href="tel:010-2589-5491" class="hover:text-accent">010-2589-5491</a> (평일 10:00 - 17:00)
               </dd>
             </div>
             <div>
-              <dt class="text-accent">인스타그램</dt>
-              <dd class="mt-1 text-ink">Instagram ID</dd>
+              <dt class="text-accent">인스타그램 DM</dt>
+              <dd class="mt-1 text-ink">
+                <a href="https://www.instagram.com/seogwipochamber/" class="hover:text-accent" target="_blank" rel="noopener noreferrer">@seogwipochamber</a>
+              </dd>
             </div>
           </dl>
         </div>

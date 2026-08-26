@@ -4,9 +4,8 @@ import { RouterLink } from 'vue-router'
 const year = new Date().getFullYear()
 
 const snsLinks = [
-  { label: 'Instagram', href: '#' },
-  { label: 'YouTube', href: '#' },
-  
+  { label: 'Instagram', href: 'https://www.instagram.com/seogwipochamber/' },
+  { label: 'YouTube', href: 'https://www.youtube.com/@seogwipochamber' }
 ]
 </script>
 
@@ -22,7 +21,7 @@ const snsLinks = [
               <a href="mailto:seogwipochamber@gmail.com" class="hover:text-accent text-ink">seogwipochamber@gmail.com</a>
             </div>
             <div class="my-1">
-              <a href="tel:064-000-0000" class="hover:text-accent text-ink">064-000-0000</a>
+              <a href="tel:010-2589-5491" class="hover:text-accent text-ink">010-2589-5491</a>
             </div>
         </div>
 
