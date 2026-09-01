@@ -39,6 +39,13 @@ export const members = [
     exp1: '',
     exp2: '',
     photo: '/img/ngh01.jpg',
+  },
+  {
+    id: 5,
+    name: '김가을',
+    part: '첼로',
+    exp1: '',
+    exp2: '',
+    photo: '/img/kge01.JPG',
   }
-  
 ]
