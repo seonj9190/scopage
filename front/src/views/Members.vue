@@ -37,7 +37,7 @@ import { conductor, members } from '@/data/members.js'
       <div class="mx-auto max-w-6xl px-6 py-20 lg:px-8">
         <SectionTitle eyebrow="Members" title="단원" />
         <ul class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <li v-for="member in members" :key="member.id" class="rounded-base border border-line p-4 flex justify-center flex-col items-center">
+          <li v-for="member in members" :key="member.id" class="rounded-base border border-line p-4 flex justify-center flex-col items-center shadow-lg">
             <div class="flex h-80 items-center justify-center overflow-hidden rounded-base sm:h-96">
               <img
                 :src="member.photo"
