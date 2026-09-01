@@ -1,6 +1,7 @@
 <script setup>
 import PageHero from '@/components/PageHero.vue'
 import SectionTitle from '@/components/SectionTitle.vue'
+import SnsIcon from '@/components/SnsIcon.vue'
 //import ContactForm from '@/components/ContactForm.vue'
 
 const inquiryTypes = ['공연 예약', '협연 문의', '단체 관람', '기타 문의']
@@ -34,7 +35,17 @@ const inquiryTypes = ['공연 예약', '협연 문의', '단체 관람', '기타
             <div>
               <dt class="text-accent">인스타그램 DM</dt>
               <dd class="mt-1 text-ink">
-                <a href="https://www.instagram.com/seogwipochamber/" class="hover:text-accent" target="_blank" rel="noopener noreferrer">@seogwipochamber</a>
+                <a
+                  href="https://www.instagram.com/seogwipochamber/"
+                  class="inline-flex items-center gap-2 hover:text-accent"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <span class="h-5 w-5 shrink-0">
+                    <SnsIcon name="instagram" />
+                  </span>
+                  @seogwipochamber
+                </a>
               </dd>
             </div>
           </dl>

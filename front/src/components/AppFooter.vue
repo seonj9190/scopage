@@ -1,11 +1,12 @@
 <script setup>
 import { RouterLink } from 'vue-router'
+import SnsIcon from '@/components/SnsIcon.vue'
 
 const year = new Date().getFullYear()
 
 const snsLinks = [
-  { label: 'Instagram', href: 'https://www.instagram.com/seogwipochamber/' },
-  { label: 'YouTube', href: 'https://www.youtube.com/@seogwipochamber' }
+  { label: 'Instagram', icon: 'instagram', href: 'https://www.instagram.com/seogwipochamber/' },
+  { label: 'YouTube', icon: 'youtube', href: 'https://www.youtube.com/@seogwipochamber' }
 ]
 </script>
 
@@ -28,7 +29,17 @@ const snsLinks = [
         <nav aria-label="SNS 링크">
           <ul class="flex gap-6 text-sm text-muted">
             <li v-for="sns in snsLinks" :key="sns.label">
-              <a :href="sns.href" class="hover:text-accent">{{ sns.label }}</a>
+              <a
+                :href="sns.href"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center gap-2 hover:text-accent"
+              >
+                <span class="h-5 w-5 shrink-0">
+                  <SnsIcon :name="sns.icon" />
+                </span>
+                {{ sns.label }}
+              </a>
             </li>
           </ul>
         </nav>
