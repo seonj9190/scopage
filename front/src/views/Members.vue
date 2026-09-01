@@ -19,7 +19,7 @@ import { conductor, members } from '@/data/members.js'
           <img
           :src="conductor.photo"
           :alt="`${conductor.name} 프로필 사진`"
-          class="aspect-[3/4] w-full max-w-xs object-cover"
+          class="h-auto w-full max-w-xs object-contain"
           loading="lazy"
           />
         </div>
@@ -36,16 +36,18 @@ import { conductor, members } from '@/data/members.js'
     <section class="border-t border-line">
       <div class="mx-auto max-w-6xl px-6 py-20 lg:px-8">
         <SectionTitle eyebrow="Members" title="단원" />
-        <ul class="grid grid-cols-2 gap-x-6 gap-y-12 sm:grid-cols-3 lg:grid-cols-4">
-          <li v-for="member in members" :key="member.id">
-            <img
-              :src="member.photo"
-              :alt="`${member.name} 프로필 사진`"
-              class="aspect-[3/4] w-full object-cover"
-              loading="lazy"
-            />
-            <p class="mt-4 text-sm text-ink">{{ member.name }}</p>
-            <p class="mt-1 text-xs text-accent">{{ member.part }}</p>
+        <ul class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <li v-for="member in members" :key="member.id" class="rounded-base border border-line p-4 flex justify-center flex-col items-center">
+            <div class="flex h-80 items-center justify-center overflow-hidden rounded-base sm:h-96">
+              <img
+                :src="member.photo"
+                :alt="`${member.name} 프로필 사진`"
+                class="h-full w-auto max-w-full rounded-base object-contain"
+                loading="lazy"
+              />
+            </div>
+            <p class="mt-4 text-lg font-semibold text-ink">{{ member.name }}</p>
+            <p class="mt-1 text-sm font-medium text-accent">{{ member.part }}</p>
             <p class="mt-2 text-xs leading-relaxed text-muted">{{ member.exp1 }}</p>
             <p class="mt-2 text-xs leading-relaxed text-muted">{{ member.exp2 }}</p>
           </li>
