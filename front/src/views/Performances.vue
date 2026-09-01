@@ -1,10 +1,24 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import PageHero from '@/components/PageHero.vue'
 import SectionTitle from '@/components/SectionTitle.vue'
 import { performances } from '@/data/performances.js'
 
 const today = new Date()
+
+const selectedImage = ref(null)
+
+function openImage(perf) {
+  selectedImage.value = { src: perf.poster, alt: `${perf.title} 포스터` }
+}
+function closeImage() {
+  selectedImage.value = null
+}
+function handleKeydown(e) {
+  if (e.key === 'Escape') closeImage()
+}
+onMounted(() => window.addEventListener('keydown', handleKeydown))
+onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
 
 const upcoming = computed(() =>
   performances
@@ -42,8 +56,9 @@ function formatDate(dateStr) {
           <img
             :src="perf.poster"
             :alt="`${perf.title} 포스터`"
-            class="aspect-[3/4] w-full max-w-[160px] object-cover"
+            class="h-auto w-full max-w-[160px] cursor-pointer object-contain"
             loading="lazy"
+            @click="openImage(perf)"
           />
           <div>
             <p class="text-xs tracking-[0.2em] text-accent uppercase">
@@ -67,8 +82,9 @@ function formatDate(dateStr) {
             <img
               :src="perf.poster"
               :alt="`${perf.title} 포스터`"
-              class="aspect-[3/4] w-full object-cover"
+              class="h-auto w-full cursor-pointer object-contain"
               loading="lazy"
+              @click="openImage(perf)"
             />
             <p class="mt-3 text-xs text-accent">{{ formatDate(perf.date) }}</p>
             <p class="mt-1 text-sm text-ink">{{ perf.title }}</p>
@@ -77,5 +93,28 @@ function formatDate(dateStr) {
         </ul>
       </div>
     </section>
+
+    <Teleport to="body">
+      <div
+        v-if="selectedImage"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6"
+        @click="closeImage"
+      >
+        <button
+          type="button"
+          class="absolute right-6 top-6 text-3xl leading-none text-white/80 hover:text-white"
+          aria-label="닫기"
+          @click="closeImage"
+        >
+          &times;
+        </button>
+        <img
+          :src="selectedImage.src"
+          :alt="selectedImage.alt"
+          class="max-h-full max-w-full object-contain"
+          @click.stop
+        />
+      </div>
+    </Teleport>
   </div>
 </template>
