@@ -34,6 +34,15 @@ export const members = [
   },
   {
     id: 4,
+    name: '김신우',
+    part: '비올라',
+    exp1: '',
+    exp2: '',
+    photo: '/img/ksw01.JPG',
+  },
+
+  {
+    id: 5,
     name: '노건형',
     part: '첼로',
     exp1: '',
@@ -41,7 +50,7 @@ export const members = [
     photo: '/img/ngh01.jpg',
   },
   {
-    id: 5,
+    id: 6,
     name: '김가을',
     part: '첼로',
     exp1: '',
