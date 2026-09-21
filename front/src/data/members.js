@@ -14,7 +14,7 @@ export const members = [
     part: '바이올린 · 악장',
     exp1: '',
     exp2: '',
-    photo: '',
+    photo: '/img/pea01.PNG',
   },
   {
     id: 2,
@@ -34,6 +34,22 @@ export const members = [
   },
   {
     id: 4,
+    name: '김소원',
+    part: '바이올린',
+    exp1: '',
+    exp2: '',
+    photo: '/img/ksw02.PNG',
+  },
+  {
+    id: 5,
+    name: '박은경',
+    part: '바이올린',
+    exp1: '',
+    exp2: '',
+    photo: '/img/pek01.JPG',
+  },
+  {
+    id: 6,
     name: '김신우',
     part: '비올라',
     exp1: '',
@@ -42,7 +58,7 @@ export const members = [
   },
 
   {
-    id: 5,
+    id: 7,
     name: '노건형',
     part: '첼로',
     exp1: '',
@@ -50,7 +66,7 @@ export const members = [
     photo: '/img/ngh01.jpg',
   },
   {
-    id: 6,
+    id: 8,
     name: '김가을',
     part: '첼로',
     exp1: '',
