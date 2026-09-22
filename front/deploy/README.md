@@ -164,6 +164,32 @@ echo "0 3 * * * root certbot renew --quiet --deploy-hook 'systemctl reload nginx
   | sudo tee /etc/cron.d/certbot-renew
 ```
 
+### 업로드 용량 제한 늘리기 (413 Request Entity Too Large)
+
+Nginx는 기본적으로 요청 본문 크기를 1MB로 제한합니다. 자료실에서 1MB보다 큰
+파일을 업로드하면 Express까지 가지도 못하고 Nginx 단계에서 `413` 오류가 납니다
+(앱의 50MB 제한과는 별개).
+
+이미 certbot으로 HTTPS를 적용한 서버라면, certbot이 `/etc/nginx/conf.d/scopage.conf`
+안에 443 포트용 서버 블록을 별도로 만들어 놨기 때문에 `deploy/nginx.conf`(80번
+포트용)만 새로 복사해서는 443 블록에 반영되지 않습니다. 서버에서 설정 파일을 직접
+열어 두 `server { ... }` 블록(80용, 443용) 모두에 아래 줄을 추가하세요.
+
+```sh
+sudo vi /etc/nginx/conf.d/scopage.conf
+```
+
+```nginx
+client_max_body_size 50m;
+```
+
+저장 후 적용합니다.
+
+```sh
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
 ## 5. 확인
 
 ```sh
