@@ -26,9 +26,6 @@ async function loadFolders() {
     ])
     folders.value = list
     members.value = memberList
-    if (!activeFolderId.value && list.length) {
-      await selectFolder(list[0].id)
-    }
   } catch (err) {
     errorMsg.value = err.message
   } finally {
@@ -189,7 +186,18 @@ function formatDate(iso) {
               :class="activeFolderId === folder.id ? 'bg-accent-soft text-ink' : 'text-muted hover:bg-accent-soft/60'"
               @click="selectFolder(folder.id)"
             >
-              <span class="truncate">{{ folder.name }}</span>
+              <span class="flex min-w-0 items-center gap-2">
+                <svg viewBox="0 0 20 20" fill="none" class="h-4 w-4 shrink-0 text-muted" aria-hidden="true">
+                  <path
+                    d="M3 6a1.5 1.5 0 0 1 1.5-1.5h3.4a1.5 1.5 0 0 1 1.06.44l1.1 1.1a1.5 1.5 0 0 0 1.06.44h4.38A1.5 1.5 0 0 1 17 8v6.5A1.5 1.5 0 0 1 15.5 16h-11A1.5 1.5 0 0 1 3 14.5V6Z"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+                <span class="truncate">{{ folder.name }}</span>
+              </span>
               <button
                 v-if="authState.member?.isAdmin"
                 type="button"
