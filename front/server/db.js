@@ -1,0 +1,204 @@
+const path = require('node:path')
+const crypto = require('node:crypto')
+require('dotenv').config({ path: path.join(__dirname, '..', '.env.local') })
+
+const mysql = require('mysql2/promise')
+
+// Distinct, readable colors auto-assigned to members in join order.
+const COLOR_PALETTE = [
+  '#e11d48', '#2563eb', '#16a34a', '#d97706', '#7c3aed',
+  '#0d9488', '#db2777', '#4f46e5', '#65a30d', '#0891b2',
+  '#c2410c', '#9333ea',
+]
+
+const pool = mysql.createPool({
+  host: process.env.DB_HOST || '127.0.0.1',
+  port: Number(process.env.DB_PORT) || 3306,
+  user: process.env.DB_USER || 'scopage',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'scopage',
+  waitForConnections: true,
+  connectionLimit: 10,
+  charset: 'utf8mb4',
+})
+
+async function initSchema() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS members (
+      id CHAR(36) PRIMARY KEY,
+      username VARCHAR(64) NOT NULL UNIQUE,
+      password_hash VARCHAR(255) NOT NULL,
+      name VARCHAR(100) NOT NULL,
+      color VARCHAR(7) NOT NULL,
+      is_admin TINYINT(1) NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS schedules (
+      id CHAR(36) PRIMARY KEY,
+      member_id CHAR(36) NOT NULL,
+      title VARCHAR(200) NOT NULL,
+      start_at VARCHAR(19) NOT NULL,
+      end_at VARCHAR(19) NOT NULL,
+      all_day TINYINT(1) NOT NULL DEFAULT 1,
+      type ENUM('fixed', 'flexible') NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `)
+}
+
+const ready = initSchema()
+
+function rowToMember(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    username: row.username,
+    passwordHash: row.password_hash,
+    name: row.name,
+    color: row.color,
+    isAdmin: !!row.is_admin,
+    createdAt: row.created_at,
+  }
+}
+
+function rowToSchedule(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    memberId: row.member_id,
+    title: row.title,
+    start: row.start_at,
+    end: row.end_at,
+    allDay: !!row.all_day,
+    type: row.type,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function publicMember(member) {
+  if (!member) return null
+  const { id, username, name, color, isAdmin } = member
+  return { id, username, name, color, isAdmin: !!isAdmin }
+}
+
+const db = {
+  ready,
+
+  async close() {
+    await pool.end()
+  },
+
+  async getMembers() {
+    const [rows] = await pool.query('SELECT * FROM members ORDER BY created_at ASC, username ASC')
+    return rows.map(rowToMember)
+  },
+
+  async getMemberById(id) {
+    const [rows] = await pool.execute('SELECT * FROM members WHERE id = ?', [id])
+    return rowToMember(rows[0])
+  },
+
+  async getMemberByUsername(username) {
+    const [rows] = await pool.execute('SELECT * FROM members WHERE username = ?', [username])
+    return rowToMember(rows[0])
+  },
+
+  async createMember({ username, passwordHash, name, isAdmin = false }) {
+    const [[{ count }]] = await pool.query('SELECT COUNT(*) AS count FROM members')
+    const color = COLOR_PALETTE[count % COLOR_PALETTE.length]
+    const id = crypto.randomUUID()
+    try {
+      await pool.execute(
+        'INSERT INTO members (id, username, password_hash, name, color, is_admin) VALUES (?, ?, ?, ?, ?, ?)',
+        [id, username, passwordHash, name, color, isAdmin ? 1 : 0]
+      )
+    } catch (err) {
+      if (err.code === 'ER_DUP_ENTRY') throw new Error('이미 존재하는 아이디입니다.')
+      throw err
+    }
+    return db.getMemberById(id)
+  },
+
+  async updateMember(id, patch) {
+    const fields = []
+    const values = []
+    if (patch.name !== undefined) {
+      fields.push('name = ?')
+      values.push(patch.name)
+    }
+    if (patch.passwordHash !== undefined) {
+      fields.push('password_hash = ?')
+      values.push(patch.passwordHash)
+    }
+    if (patch.isAdmin !== undefined) {
+      fields.push('is_admin = ?')
+      values.push(patch.isAdmin ? 1 : 0)
+    }
+    if (!fields.length) return db.getMemberById(id)
+    values.push(id)
+    await pool.execute(`UPDATE members SET ${fields.join(', ')} WHERE id = ?`, values)
+    return db.getMemberById(id)
+  },
+
+  async getSchedules() {
+    const [rows] = await pool.query('SELECT * FROM schedules ORDER BY start_at ASC')
+    return rows.map(rowToSchedule)
+  },
+
+  async getScheduleById(id) {
+    const [rows] = await pool.execute('SELECT * FROM schedules WHERE id = ?', [id])
+    return rowToSchedule(rows[0])
+  },
+
+  async createSchedule({ memberId, title, start, end, allDay, type }) {
+    const id = crypto.randomUUID()
+    await pool.execute(
+      'INSERT INTO schedules (id, member_id, title, start_at, end_at, all_day, type) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [id, memberId, title, start, end, allDay ? 1 : 0, type]
+    )
+    return db.getScheduleById(id)
+  },
+
+  async updateSchedule(id, patch) {
+    const fields = []
+    const values = []
+    if (patch.title !== undefined) {
+      fields.push('title = ?')
+      values.push(patch.title)
+    }
+    if (patch.start !== undefined) {
+      fields.push('start_at = ?')
+      values.push(patch.start)
+    }
+    if (patch.end !== undefined) {
+      fields.push('end_at = ?')
+      values.push(patch.end)
+    }
+    if (patch.allDay !== undefined) {
+      fields.push('all_day = ?')
+      values.push(patch.allDay ? 1 : 0)
+    }
+    if (patch.type !== undefined) {
+      fields.push('type = ?')
+      values.push(patch.type)
+    }
+    if (!fields.length) return db.getScheduleById(id)
+    values.push(id)
+    await pool.execute(`UPDATE schedules SET ${fields.join(', ')} WHERE id = ?`, values)
+    return db.getScheduleById(id)
+  },
+
+  async deleteSchedule(id) {
+    const [result] = await pool.execute('DELETE FROM schedules WHERE id = ?', [id])
+    return result.affectedRows > 0
+  },
+
+  publicMember,
+}
+
+module.exports = db

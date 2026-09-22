@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuth } from '@/auth'
 
 const routes = [
   {
@@ -43,6 +44,24 @@ const routes = [
     component: () => import('../views/Support.vue'),
     meta: { title: '후원' },
   },
+  {
+    path: '/login',
+    name: 'Login',
+    component: () => import('../views/Login.vue'),
+    meta: { title: '로그인' },
+  },
+  {
+    path: '/calendar',
+    name: 'Calendar',
+    component: () => import('../views/Calendar.vue'),
+    meta: { title: '단원 캘린더', requiresAuth: true },
+  },
+  {
+    path: '/admin/members',
+    name: 'AdminMembers',
+    component: () => import('../views/AdminMembers.vue'),
+    meta: { title: '멤버 관리', requiresAuth: true, requiresAdmin: true },
+  },
 ]
 
 const router = createRouter({
@@ -56,6 +75,21 @@ const router = createRouter({
 router.afterEach((to) => {
   const base = '서귀포챔버오케스트라'
   document.title = to.meta?.title && to.name !== 'Home' ? `${to.meta.title} | ${base}` : base
+})
+
+router.beforeEach(async (to) => {
+  if (!to.meta?.requiresAuth) return true
+
+  const { state, fetchMe } = useAuth()
+  if (!state.ready) await fetchMe()
+
+  if (!state.member) {
+    return { path: '/login', query: { redirect: to.fullPath } }
+  }
+  if (to.meta.requiresAdmin && !state.member.isAdmin) {
+    return { path: '/calendar' }
+  }
+  return true
 })
 
 export default router

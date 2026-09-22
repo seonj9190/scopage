@@ -37,3 +37,6 @@ __screenshots__/
 
 # Vite
 *.timestamp-*-*.mjs
+
+# Auto-generated auth signing secret (server-side runtime state)
+/data/
