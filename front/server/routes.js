@@ -263,7 +263,16 @@ router.get(
     // saved without an extension — so set it explicitly here.
     if (ext) res.type(ext)
 
-    res.download(path.join(UPLOAD_DIR, file.storedName), downloadName, (err) => {
+    // ?inline=1 opens the file in the browser (e.g. a PDF preview tab)
+    // instead of forcing a save-as download.
+    const dispositionType = req.query.inline ? 'inline' : 'attachment'
+    const asciiFallback = downloadName.replace(/[^\x20-\x7E]/g, '_').replace(/"/g, "'")
+    res.set(
+      'Content-Disposition',
+      `${dispositionType}; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(downloadName)}`
+    )
+
+    res.sendFile(path.join(UPLOAD_DIR, file.storedName), (err) => {
       if (err && !res.headersSent) res.status(404).json({ error: '파일을 찾을 수 없습니다.' })
     })
   })

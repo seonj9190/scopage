@@ -163,6 +163,23 @@ function formatDate(iso) {
       <!-- Folder list -->
       <aside>
         <h2 class="mb-2 text-xs font-medium tracking-wide text-muted uppercase">폴더</h2>
+
+        <form class="mb-4 flex gap-2" @submit.prevent="createFolder">
+          <input
+            v-model="newFolderName"
+            type="text"
+            placeholder="새 폴더 이름"
+            class="min-w-0 flex-1 border border-line px-2 py-1.5 text-sm"
+          />
+          <button
+            type="submit"
+            :disabled="creatingFolder"
+            class="shrink-0 border border-line px-2 py-1.5 text-xs hover:bg-accent-soft disabled:opacity-50"
+          >
+            추가
+          </button>
+        </form>
+
         <div v-if="loadingFolders" class="text-sm text-muted">불러오는 중...</div>
         <ul v-else class="space-y-1">
           <li v-for="folder in folders" :key="folder.id">
@@ -184,22 +201,6 @@ function formatDate(iso) {
             </button>
           </li>
         </ul>
-
-        <form class="mt-4 flex gap-2" @submit.prevent="createFolder">
-          <input
-            v-model="newFolderName"
-            type="text"
-            placeholder="새 폴더 이름"
-            class="min-w-0 flex-1 border border-line px-2 py-1.5 text-sm"
-          />
-          <button
-            type="submit"
-            :disabled="creatingFolder"
-            class="shrink-0 border border-line px-2 py-1.5 text-xs hover:bg-accent-soft disabled:opacity-50"
-          >
-            추가
-          </button>
-        </form>
       </aside>
 
       <!-- File list -->
@@ -214,7 +215,9 @@ function formatDate(iso) {
             <li v-for="file in files" :key="file.id" class="flex items-center justify-between gap-4 px-4 py-3">
               <div class="min-w-0">
                 <a
-                  :href="`/api/files/${file.id}/download`"
+                  :href="`/api/files/${file.id}/download?inline=1`"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   class="block truncate text-sm text-ink hover:text-accent hover:underline"
                 >
                   {{ file.title }}
@@ -224,14 +227,42 @@ function formatDate(iso) {
                   {{ formatDate(file.createdAt) }} · {{ formatSize(file.size) }}
                 </p>
               </div>
-              <button
-                v-if="canDelete(file)"
-                type="button"
-                class="shrink-0 text-xs text-muted hover:text-rose-600"
-                @click="removeFile(file)"
-              >
-                삭제
-              </button>
+              <div class="flex shrink-0 items-center gap-1">
+                <a
+                  :href="`/api/files/${file.id}/download`"
+                  class="flex h-8 w-8 items-center justify-center text-muted hover:text-ink"
+                  title="다운로드"
+                  aria-label="다운로드"
+                >
+                  <svg viewBox="0 0 20 20" fill="none" class="h-4 w-4" aria-hidden="true">
+                    <path
+                      d="M10 3v9m0 0 3-3m-3 3-3-3M4 14v1.5A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5V14"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </a>
+                <button
+                  v-if="canDelete(file)"
+                  type="button"
+                  class="flex h-8 w-8 items-center justify-center text-muted hover:text-rose-600"
+                  title="삭제"
+                  aria-label="삭제"
+                  @click="removeFile(file)"
+                >
+                  <svg viewBox="0 0 20 20" fill="none" class="h-4 w-4" aria-hidden="true">
+                    <path
+                      d="M4 6h12M8 6V4.5A1.5 1.5 0 0 1 9.5 3h1A1.5 1.5 0 0 1 12 4.5V6m-6 0 .6 9.4A1.5 1.5 0 0 0 8.1 17h3.8a1.5 1.5 0 0 0 1.5-1.6L14 6M8.5 9v5m3-5v5"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </button>
+              </div>
             </li>
           </ul>
 
