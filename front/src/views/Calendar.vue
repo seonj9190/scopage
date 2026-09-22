@@ -403,7 +403,7 @@ function editFromDayList(schedule) {
                   class="hidden truncate rounded px-1 text-center text-sm font-bold tracking-tight sm:block"
                   :style="{ backgroundColor: `${TEAM_COLOR}26`, color: TEAM_TEXT_COLOR }"
                 >
-                  [ 공식 ]
+                  [ 공식일정 ]
                 </p>
               </div>
               <p
