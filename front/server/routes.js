@@ -228,6 +228,7 @@ router.put(
     }
 
     const patch = {}
+    if (body.username) patch.username = body.username
     if (body.name) patch.name = body.name
     if (body.password) patch.passwordHash = hashPassword(body.password)
     if ('isAdmin' in body) patch.isAdmin = toBool(body.isAdmin)
@@ -239,7 +240,13 @@ router.put(
     if ('isConductor' in body) patch.isConductor = toBool(body.isConductor)
     if (req.file) patch.photoUrl = `/profile-photos/${req.file.filename}`
 
-    const member = await db.updateMember(req.params.id, patch)
+    let member
+    try {
+      member = await db.updateMember(req.params.id, patch)
+    } catch (err) {
+      if (req.file) await fs.promises.unlink(req.file.path).catch(() => {})
+      return res.status(409).json({ error: err.message })
+    }
     if (patch.isConductor) await db.clearConductorExcept(member.id)
 
     // Clean up the old photo file only if we replaced it with a new upload

@@ -251,6 +251,10 @@ const db = {
   async updateMember(id, patch) {
     const fields = []
     const values = []
+    if (patch.username !== undefined) {
+      fields.push('username = ?')
+      values.push(patch.username)
+    }
     if (patch.name !== undefined) {
       fields.push('name = ?')
       values.push(patch.name)
@@ -293,7 +297,12 @@ const db = {
     }
     if (!fields.length) return db.getMemberById(id)
     values.push(id)
-    await pool.execute(`UPDATE members SET ${fields.join(', ')} WHERE id = ?`, values)
+    try {
+      await pool.execute(`UPDATE members SET ${fields.join(', ')} WHERE id = ?`, values)
+    } catch (err) {
+      if (err.code === 'ER_DUP_ENTRY') throw new Error('이미 존재하는 아이디입니다.')
+      throw err
+    }
     return db.getMemberById(id)
   },
 

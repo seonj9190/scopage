@@ -91,6 +91,25 @@ async function submitPasswordReset(member) {
   }
 }
 
+const editUsernameFor = ref(null)
+const newUsername = ref('')
+
+async function submitUsernameChange(member) {
+  if (!newUsername.value.trim()) return
+  try {
+    const { member: updated } = await api(`/admin/members/${member.id}`, {
+      method: 'PUT',
+      body: buildMemberFormData({ username: newUsername.value.trim() }),
+    })
+    member.username = updated.username
+    successMsg.value = `${member.name}님 아이디가 변경되었습니다.`
+    editUsernameFor.value = null
+    newUsername.value = ''
+  } catch (err) {
+    errorMsg.value = err.message
+  }
+}
+
 async function toggleActive(member) {
   const makeActive = !member.isActive
   if (!makeActive && !confirm(`${member.name}님 계정을 비활성화할까요? 로그인이 즉시 차단되지만, 기존 일정과 업로드 파일은 그대로 유지됩니다.`)) {
@@ -229,6 +248,15 @@ async function submitProfileEdit(member) {
               </div>
               <button v-else type="button" class="text-xs text-muted hover:text-ink hover:underline" @click="resetPasswordFor = m.id; newPassword = ''">
                 비밀번호 변경
+              </button>
+
+              <div v-if="editUsernameFor === m.id" class="flex items-center gap-2">
+                <input v-model="newUsername" type="text" placeholder="새 아이디" class="border border-line px-2 py-1 text-xs" />
+                <button type="button" class="text-xs text-accent hover:underline" @click="submitUsernameChange(m)">확인</button>
+                <button type="button" class="text-xs text-muted hover:underline" @click="editUsernameFor = null">취소</button>
+              </div>
+              <button v-else type="button" class="text-xs text-muted hover:text-ink hover:underline" @click="editUsernameFor = m.id; newUsername = m.username">
+                아이디 변경
               </button>
 
               <button
