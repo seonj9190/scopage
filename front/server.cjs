@@ -2,6 +2,7 @@ const express = require('express')
 const cookieParser = require('cookie-parser')
 const path = require('node:path')
 const db = require('./server/db')
+const { PROFILE_UPLOAD_DIR } = require('./server/upload')
 const apiRoutes = require('./server/routes')
 
 const PORT = process.env.PORT || 3000
@@ -14,6 +15,10 @@ app.use(express.json())
 app.use(cookieParser())
 
 app.use('/api', apiRoutes)
+
+// Member profile photos are public-facing (단원소개 page), unlike the
+// members-only resource-library files — served without auth.
+app.use('/profile-photos', express.static(PROFILE_UPLOAD_DIR))
 
 app.use((err, _req, res, _next) => {
   console.error(err)

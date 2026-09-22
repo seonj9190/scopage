@@ -104,6 +104,12 @@ const modalOpen = ref(false)
 const editingId = ref(null)
 const form = ref(emptyForm())
 
+// New schedules shouldn't be assignable to a deactivated member, but an
+// already-assigned inactive member must stay selectable while editing.
+const assignableMembers = computed(() =>
+  members.value.filter((m) => m.isActive || m.id === form.value.assignedMemberId)
+)
+
 function emptyForm(dateStr = toDateOnly(today)) {
   return {
     title: '',
@@ -390,7 +396,9 @@ function chipStyle(schedule) {
               :disabled="!canEditCurrent"
               class="w-full border border-line px-2 py-1.5 text-sm disabled:bg-accent-soft"
             >
-              <option v-for="m in members" :key="m.id" :value="m.id">{{ m.name }}</option>
+              <option v-for="m in assignableMembers" :key="m.id" :value="m.id">
+                {{ m.name }}{{ !m.isActive ? ' (비활성)' : '' }}
+              </option>
             </select>
           </div>
 

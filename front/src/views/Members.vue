@@ -1,7 +1,23 @@
 <script setup>
+import { ref, onMounted } from 'vue'
 import PageHero from '@/components/PageHero.vue'
 import SectionTitle from '@/components/SectionTitle.vue'
-import { conductor, members } from '@/data/members.js'
+import { conductor } from '@/data/members.js'
+
+const members = ref([])
+const loading = ref(true)
+
+onMounted(async () => {
+  try {
+    const res = await fetch('/api/public/members')
+    const data = await res.json()
+    members.value = data.members || []
+  } catch {
+    members.value = []
+  } finally {
+    loading.value = false
+  }
+})
 </script>
 
 <template>
@@ -36,11 +52,12 @@ import { conductor, members } from '@/data/members.js'
     <section class="border-t border-line">
       <div class="mx-auto max-w-6xl px-6 py-20 lg:px-8">
         <SectionTitle eyebrow="Members" title="단원" />
-        <ul class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <p v-if="loading" class="text-sm text-muted">불러오는 중...</p>
+        <ul v-else class="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <li v-for="member in members" :key="member.id" class="rounded-base border border-line p-4 flex justify-center flex-col items-center shadow-lg">
             <div class="flex h-80 items-center justify-center overflow-hidden rounded-base sm:h-96">
               <img
-                :src="member.photo"
+                :src="member.photoUrl"
                 :alt="`${member.name} 프로필 사진`"
                 class="h-full w-auto max-w-full rounded-base object-contain"
                 loading="lazy"
@@ -48,8 +65,8 @@ import { conductor, members } from '@/data/members.js'
             </div>
             <p class="mt-4 text-lg font-semibold text-ink">{{ member.name }}</p>
             <p class="mt-1 text-sm font-medium text-accent">{{ member.part }}</p>
-            <p class="mt-2 text-xs leading-relaxed text-muted">{{ member.exp1 }}</p>
-            <p class="mt-2 text-xs leading-relaxed text-muted">{{ member.exp2 }}</p>
+            <p class="mt-2 text-xs leading-relaxed text-muted">{{ member.bio1 }}</p>
+            <p class="mt-2 text-xs leading-relaxed text-muted">{{ member.bio2 }}</p>
           </li>
         </ul>
       </div>

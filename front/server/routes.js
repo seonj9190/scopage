@@ -2,7 +2,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const express = require('express')
 const db = require('./db')
-const { UPLOAD_DIR, uploadSingle } = require('./upload')
+const { UPLOAD_DIR, uploadSingle, PROFILE_UPLOAD_DIR, uploadPhoto } = require('./upload')
 const {
   hashPassword,
   verifyPassword,
@@ -32,6 +32,9 @@ router.post(
     if (!member || !verifyPassword(password, member.passwordHash)) {
       return res.status(401).json({ error: '아이디 또는 비밀번호가 올바르지 않습니다.' })
     }
+    if (!member.isActive) {
+      return res.status(403).json({ error: '비활성화된 계정입니다. 관리자에게 문의하세요.' })
+    }
     const token = issueToken(member)
     setAuthCookie(req, res, token)
     res.json({ member: db.publicMember(member) })
@@ -46,6 +49,15 @@ router.post('/auth/logout', (_req, res) => {
 router.get('/auth/me', requireAuth, (req, res) => {
   res.json({ member: db.publicMember(req.member) })
 })
+
+// ---- Public member roster (단원소개 page — no login required) ----
+
+router.get(
+  '/public/members',
+  h(async (_req, res) => {
+    res.json({ members: (await db.getPublicMembers()).map(db.publicProfile) })
+  })
+)
 
 // ---- Members (for calendar legend / colors) ----
 
@@ -166,9 +178,11 @@ router.post(
   '/admin/members',
   requireAuth,
   requireAdmin,
+  uploadPhoto,
   h(async (req, res) => {
-    const { username, password, name, isAdmin } = req.body || {}
+    const { username, password, name, isAdmin, part, bio1, bio2, isPublic } = req.body || {}
     if (!username || !password || !name) {
+      if (req.file) await fs.promises.unlink(req.file.path).catch(() => {})
       return res.status(400).json({ error: '아이디, 비밀번호, 이름을 입력하세요.' })
     }
     try {
@@ -176,10 +190,16 @@ router.post(
         username,
         passwordHash: hashPassword(password),
         name,
-        isAdmin: !!isAdmin,
+        isAdmin: isAdmin === 'true' || isAdmin === true,
+        part: part || null,
+        bio1: bio1 || null,
+        bio2: bio2 || null,
+        photoUrl: req.file ? `/profile-photos/${req.file.filename}` : null,
+        isPublic: isPublic === 'true' || isPublic === true,
       })
       res.status(201).json({ member: db.publicMember(member) })
     } catch (err) {
+      if (req.file) await fs.promises.unlink(req.file.path).catch(() => {})
       res.status(409).json({ error: err.message })
     }
   })
@@ -189,14 +209,42 @@ router.put(
   '/admin/members/:id',
   requireAuth,
   requireAdmin,
+  uploadPhoto,
   h(async (req, res) => {
-    const { name, password, isAdmin } = req.body || {}
+    const body = req.body || {}
+    const toBool = (v) => v === 'true' || v === true
+
+    if ('isActive' in body && !toBool(body.isActive) && req.params.id === req.member.id) {
+      if (req.file) await fs.promises.unlink(req.file.path).catch(() => {})
+      return res.status(400).json({ error: '본인 계정은 비활성화할 수 없습니다.' })
+    }
+
+    const existing = await db.getMemberById(req.params.id)
+    if (!existing) {
+      if (req.file) await fs.promises.unlink(req.file.path).catch(() => {})
+      return res.status(404).json({ error: '멤버를 찾을 수 없습니다.' })
+    }
+
     const patch = {}
-    if (name) patch.name = name
-    if (password) patch.passwordHash = hashPassword(password)
-    if (typeof isAdmin === 'boolean') patch.isAdmin = isAdmin
+    if (body.name) patch.name = body.name
+    if (body.password) patch.passwordHash = hashPassword(body.password)
+    if ('isAdmin' in body) patch.isAdmin = toBool(body.isAdmin)
+    if ('isActive' in body) patch.isActive = toBool(body.isActive)
+    if ('part' in body) patch.part = body.part || null
+    if ('bio1' in body) patch.bio1 = body.bio1 || null
+    if ('bio2' in body) patch.bio2 = body.bio2 || null
+    if ('isPublic' in body) patch.isPublic = toBool(body.isPublic)
+    if (req.file) patch.photoUrl = `/profile-photos/${req.file.filename}`
+
     const member = await db.updateMember(req.params.id, patch)
-    if (!member) return res.status(404).json({ error: '멤버를 찾을 수 없습니다.' })
+
+    // Clean up the old photo file only if we replaced it with a new upload
+    // and the old one was one of ours (never touch legacy /img/ paths).
+    if (req.file && existing.photoUrl?.startsWith('/profile-photos/')) {
+      const oldFilename = existing.photoUrl.replace('/profile-photos/', '')
+      await fs.promises.unlink(path.join(PROFILE_UPLOAD_DIR, oldFilename)).catch(() => {})
+    }
+
     res.json({ member: db.publicMember(member) })
   })
 )

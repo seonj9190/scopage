@@ -64,8 +64,22 @@ node server/seed.js <아이디> <비밀번호> <이름>
 
 로그인 서명에 쓰이는 비밀키는 `data/.jwt_secret`에 자동 생성되어 저장됩니다
 (git에는 커밋되지 않음). 서버를 새 장비로 옮길 때는 MariaDB 데이터(멤버·일정)와
-`data/` 폴더를 함께 백업·복원해야 기존 로그인 세션과 계정이 유지됩니다. MariaDB
-백업은 `mysqldump scopage > backup.sql`로 받을 수 있습니다.
+`data/`, `uploads/` 폴더를 함께 백업·복원해야 기존 로그인 세션·계정·업로드
+파일이 유지됩니다. MariaDB 백업은 `mysqldump scopage > backup.sql`로 받을 수
+있습니다.
+
+### 단원소개(홈페이지) 데이터 최초 1회 이전
+
+단원소개 페이지가 `src/data/members.js` 정적 파일 대신 DB 기반으로 바뀌면서,
+기존에 파일에 있던 단원 정보를 최초 1회 DB로 옮겨야 합니다 (다시 실행해도
+이미 옮겨진 항목은 건너뛰므로 안전합니다).
+
+```sh
+node server/migrateStaticMembers.js
+```
+
+이후로는 "멤버 관리" 화면에서 멤버를 추가/수정할 때 파트·소개글·사진과
+"단원소개 페이지에 공개" 여부를 함께 입력하면 됩니다.
 
 재부팅 후에도 계속 떠 있도록 pm2 또는 systemd로 등록하는 것을 권장합니다.
 

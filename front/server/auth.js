@@ -60,7 +60,10 @@ async function requireAuth(req, res, next) {
   try {
     const payload = jwt.verify(token, JWT_SECRET)
     const member = await db.getMemberById(payload.sub)
-    if (!member) return res.status(401).json({ error: '로그인이 필요합니다.' })
+    if (!member || !member.isActive) {
+      clearAuthCookie(res)
+      return res.status(401).json({ error: '로그인이 필요합니다.' })
+    }
     req.member = member
     // Sliding session: every authenticated request pushes the expiry back
     // out, so an active member is never signed out by a fixed timeout.

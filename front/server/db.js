@@ -42,9 +42,22 @@ async function initSchema() {
       name VARCHAR(100) NOT NULL,
       color VARCHAR(7) NOT NULL,
       is_admin TINYINT(1) NOT NULL DEFAULT 0,
+      is_active TINYINT(1) NOT NULL DEFAULT 1,
+      part VARCHAR(100) NULL,
+      bio1 VARCHAR(500) NULL,
+      bio2 VARCHAR(500) NULL,
+      photo_url VARCHAR(255) NULL,
+      is_public TINYINT(1) NOT NULL DEFAULT 0,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `)
+  // Existing deployments created the table before these columns existed.
+  await ensureColumn('members', 'is_active', 'is_active TINYINT(1) NOT NULL DEFAULT 1')
+  await ensureColumn('members', 'part', 'part VARCHAR(100) NULL')
+  await ensureColumn('members', 'bio1', 'bio1 VARCHAR(500) NULL')
+  await ensureColumn('members', 'bio2', 'bio2 VARCHAR(500) NULL')
+  await ensureColumn('members', 'photo_url', 'photo_url VARCHAR(255) NULL')
+  await ensureColumn('members', 'is_public', 'is_public TINYINT(1) NOT NULL DEFAULT 0')
   await pool.query(`
     CREATE TABLE IF NOT EXISTS schedules (
       id CHAR(36) PRIMARY KEY,
@@ -99,6 +112,12 @@ function rowToMember(row) {
     name: row.name,
     color: row.color,
     isAdmin: !!row.is_admin,
+    isActive: !!row.is_active,
+    part: row.part,
+    bio1: row.bio1,
+    bio2: row.bio2,
+    photoUrl: row.photo_url,
+    isPublic: !!row.is_public,
     createdAt: row.created_at,
   }
 }
@@ -145,8 +164,28 @@ function rowToFile(row) {
 
 function publicMember(member) {
   if (!member) return null
-  const { id, username, name, color, isAdmin } = member
-  return { id, username, name, color, isAdmin: !!isAdmin }
+  const { id, username, name, color, isAdmin, isActive, part, bio1, bio2, photoUrl, isPublic } = member
+  return {
+    id,
+    username,
+    name,
+    color,
+    isAdmin: !!isAdmin,
+    isActive: !!isActive,
+    part,
+    bio1,
+    bio2,
+    photoUrl,
+    isPublic: !!isPublic,
+  }
+}
+
+// Shape exposed on the unauthenticated public roster — no username/admin/
+// active flags, just what a visitor to the site should see.
+function publicProfile(member) {
+  if (!member) return null
+  const { id, name, part, bio1, bio2, photoUrl } = member
+  return { id, name, part, bio1, bio2, photoUrl }
 }
 
 const db = {
@@ -171,14 +210,27 @@ const db = {
     return rowToMember(rows[0])
   },
 
-  async createMember({ username, passwordHash, name, isAdmin = false }) {
+  async createMember({
+    username,
+    passwordHash,
+    name,
+    isAdmin = false,
+    isActive = true,
+    part = null,
+    bio1 = null,
+    bio2 = null,
+    photoUrl = null,
+    isPublic = false,
+  }) {
     const [[{ count }]] = await pool.query('SELECT COUNT(*) AS count FROM members')
     const color = COLOR_PALETTE[count % COLOR_PALETTE.length]
     const id = crypto.randomUUID()
     try {
       await pool.execute(
-        'INSERT INTO members (id, username, password_hash, name, color, is_admin) VALUES (?, ?, ?, ?, ?, ?)',
-        [id, username, passwordHash, name, color, isAdmin ? 1 : 0]
+        `INSERT INTO members
+           (id, username, password_hash, name, color, is_admin, is_active, part, bio1, bio2, photo_url, is_public)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, username, passwordHash, name, color, isAdmin ? 1 : 0, isActive ? 1 : 0, part, bio1, bio2, photoUrl, isPublic ? 1 : 0]
       )
     } catch (err) {
       if (err.code === 'ER_DUP_ENTRY') throw new Error('이미 존재하는 아이디입니다.')
@@ -202,10 +254,42 @@ const db = {
       fields.push('is_admin = ?')
       values.push(patch.isAdmin ? 1 : 0)
     }
+    if (patch.isActive !== undefined) {
+      fields.push('is_active = ?')
+      values.push(patch.isActive ? 1 : 0)
+    }
+    if (patch.part !== undefined) {
+      fields.push('part = ?')
+      values.push(patch.part)
+    }
+    if (patch.bio1 !== undefined) {
+      fields.push('bio1 = ?')
+      values.push(patch.bio1)
+    }
+    if (patch.bio2 !== undefined) {
+      fields.push('bio2 = ?')
+      values.push(patch.bio2)
+    }
+    if (patch.photoUrl !== undefined) {
+      fields.push('photo_url = ?')
+      values.push(patch.photoUrl)
+    }
+    if (patch.isPublic !== undefined) {
+      fields.push('is_public = ?')
+      values.push(patch.isPublic ? 1 : 0)
+    }
     if (!fields.length) return db.getMemberById(id)
     values.push(id)
     await pool.execute(`UPDATE members SET ${fields.join(', ')} WHERE id = ?`, values)
     return db.getMemberById(id)
+  },
+
+  async getPublicMembers() {
+    // is_active only gates login capability, not this — a profile-only
+    // entry (never meant to log in) still belongs on the public roster.
+    // Admins control public visibility solely through is_public.
+    const [rows] = await pool.query('SELECT * FROM members WHERE is_public = 1 ORDER BY created_at ASC')
+    return rows.map(rowToMember)
   },
 
   async getSchedules() {
@@ -318,6 +402,7 @@ const db = {
   },
 
   publicMember,
+  publicProfile,
 }
 
 module.exports = db
