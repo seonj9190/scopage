@@ -1,8 +1,11 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+import { useAuth } from '@/auth'
 
-const navItems = [
+const { state: authState } = useAuth()
+
+const baseNavItems = [
   { to: '/about', label: '소개' },
   { to: '/members', label: '단원소개' },
   { to: '/performances', label: '공연일정' },
@@ -10,6 +13,10 @@ const navItems = [
   { to: '/inquiry', label: '공연문의' },
   { to: '/support', label: '후원' },
 ]
+
+const navItems = computed(() =>
+  authState.member ? [...baseNavItems, { to: '/calendar', label: '캘린더' }] : baseNavItems
+)
 
 const isOpen = ref(false)
 const route = useRoute()
