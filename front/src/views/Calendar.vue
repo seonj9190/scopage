@@ -17,6 +17,15 @@ const viewMonth = ref(today.getMonth()) // 0-based
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
 // Official team schedules aren't tied to one member's color.
 const TEAM_COLOR = '#7a6a4f'
+// A darker, higher-contrast shade for the plain "공식" text label in day
+// cells — TEAM_COLOR itself reads too faint at small sizes on a white cell.
+const TEAM_TEXT_COLOR = '#5c4423'
+// Vivid gold for the mobile star icon marking official schedules — deliberately
+// distinct from TEAM_COLOR so it stays eye-catching at small sizes.
+const STAR_COLOR = '#f59e0b'
+// Cell background for a day with an official schedule (mobile only) — kept
+// a different hue from STAR_COLOR so the gold star doesn't wash out against it.
+const TEAM_CELL_BG_CLASS = 'bg-slate-800/15'
 
 const monthLabel = computed(() => `${viewYear.value}년 ${viewMonth.value + 1}월`)
 
@@ -51,8 +60,22 @@ function schedulesOn(dateObj) {
     .sort((a, b) => a.start.localeCompare(b.start))
 }
 
+function hasTeamSchedule(dateObj) {
+  return schedulesOn(dateObj).some((s) => s.isTeam)
+}
+
 function isCurrentMonth(d) {
   return d.getMonth() === viewMonth.value
+}
+
+// A day can be both "outside this month" and "has an official schedule" —
+// only one background utility should ever land on the cell, or Tailwind's
+// generated CSS order (not the order written here) silently decides which
+// one wins, regardless of which condition actually matters more. The team
+// tint takes precedence so official schedules stay visible on preview rows.
+function dayCellBgClass(d) {
+  if (hasTeamSchedule(d)) return `${TEAM_CELL_BG_CLASS} sm:bg-transparent`
+  return !isCurrentMonth(d) ? 'bg-base/50' : ''
 }
 
 function isToday(d) {
@@ -359,7 +382,7 @@ function editFromDayList(schedule) {
           v-for="d in calendarDays"
           :key="d.toISOString()"
           class="min-h-28 cursor-pointer border-b border-r border-line p-1.5 align-top hover:bg-accent-soft/50"
-          :class="!isCurrentMonth(d) ? 'bg-base/50 text-muted/60' : ''"
+          :class="[dayCellBgClass(d), !isCurrentMonth(d) ? 'text-muted/60' : '']"
           @click="openDayList(d)"
         >
           <div
@@ -370,15 +393,26 @@ function editFromDayList(schedule) {
           </div>
           <div class="space-y-1">
             <div v-for="s in schedulesOn(d)" :key="s.id">
-              <p v-if="s.isTeam" class="truncate text-[11px] font-semibold" :style="{ color: TEAM_COLOR }">
-                공식
-              </p>
+              <div v-if="s.isTeam" class="flex justify-center sm:block">
+                <svg viewBox="0 0 20 20" class="h-6 w-6 sm:hidden" :fill="STAR_COLOR" aria-label="공식 일정">
+                  <path
+                    d="M10 1.6l2.47 5.32 5.86.58-4.4 3.93 1.26 5.77L10 14.3l-5.19 2.9 1.26-5.77-4.4-3.93 5.86-.58L10 1.6z"
+                  />
+                </svg>
+                <p
+                  class="hidden truncate rounded px-1 text-center text-sm font-bold tracking-tight sm:block"
+                  :style="{ backgroundColor: `${TEAM_COLOR}26`, color: TEAM_TEXT_COLOR }"
+                >
+                  [ 공식 ]
+                </p>
+              </div>
               <p
                 v-else
                 class="truncate rounded border px-1.5 py-0.5 text-left text-[11px]"
                 :style="chipStyle(s)"
               >
-                {{ membersById[s.memberId]?.name || '' }}
+                <span class="sm:hidden">{{ (membersById[s.memberId]?.name || '').slice(0, 1) }}</span>
+                <span class="hidden sm:inline">{{ membersById[s.memberId]?.name || '' }}</span>
               </p>
             </div>
           </div>
@@ -405,7 +439,14 @@ function editFromDayList(schedule) {
               class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent-soft"
               @click="editFromDayList(s)"
             >
+              <img
+                v-if="!s.isTeam && membersById[s.memberId]?.photoUrl"
+                :src="membersById[s.memberId].photoUrl"
+                class="h-6 w-6 shrink-0 rounded-full object-cover"
+                :alt="`${membersById[s.memberId]?.name || ''} 프로필 사진`"
+              />
               <span
+                v-else
                 class="h-2.5 w-2.5 shrink-0 rounded-full"
                 :style="{ backgroundColor: s.isTeam ? TEAM_COLOR : membersById[s.memberId]?.color || '#888' }"
               />
