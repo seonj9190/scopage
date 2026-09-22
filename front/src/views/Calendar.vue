@@ -274,6 +274,14 @@ function chipStyle(schedule) {
   }
   return { backgroundColor: `${color}1A`, color, borderColor: color, borderStyle: 'dashed' }
 }
+
+// Team schedules aren't tied to one member, so there's no photo to show for
+// them — they keep the text chip. A member without an uploaded photo also
+// falls back to text.
+function photoFor(schedule) {
+  if (schedule.isTeam) return null
+  return membersById.value[schedule.memberId]?.photoUrl || null
+}
 </script>
 
 <template>
@@ -347,12 +355,21 @@ function chipStyle(schedule) {
               v-for="s in schedulesOn(d)"
               :key="s.id"
               type="button"
-              class="block w-full truncate rounded border px-1.5 py-0.5 text-left text-[11px]"
+              class="flex w-full items-center rounded border"
+              :class="photoFor(s) ? 'justify-center p-0.5' : 'truncate px-1.5 py-0.5 text-left text-[11px]'"
               :style="chipStyle(s)"
               :title="`${s.isTeam ? '팀 공식 일정' : membersById[s.memberId]?.name || ''} · ${s.title}`"
               @click.stop="openEdit(s)"
             >
-              <span v-if="s.isTeam" class="mr-1 font-semibold">[공식]</span>{{ s.title }}
+              <img
+                v-if="photoFor(s)"
+                :src="photoFor(s)"
+                class="h-5 w-5 rounded-sm object-cover"
+                :alt="`${membersById[s.memberId]?.name || ''} 프로필 사진`"
+              />
+              <template v-else>
+                <span v-if="s.isTeam" class="mr-1 font-semibold">[공식]</span>{{ s.title }}
+              </template>
             </button>
           </div>
         </div>
