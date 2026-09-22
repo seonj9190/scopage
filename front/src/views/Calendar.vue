@@ -436,7 +436,7 @@ function editFromDayList(schedule) {
           <li v-for="s in dayListSchedules" :key="s.id">
             <button
               type="button"
-              class="flex w-full items-center gap-3 px-4 py-3 text-left text-base hover:bg-accent-soft"
+              class="flex w-full items-center gap-3 px-4 py-3 text-left text-base text-ink"
               @click="editFromDayList(s)"
             >
               <img
@@ -450,12 +450,12 @@ function editFromDayList(schedule) {
                 class="h-11 w-11 shrink-0 rounded-full"
                 :style="{ backgroundColor: s.isTeam ? TEAM_COLOR : membersById[s.memberId]?.color || '#888' }"
               />
-              <span class="min-w-0 flex-1 truncate">
+              <span class="min-w-0 flex-1 truncate font-medium">
                 <span v-if="s.isTeam" class="mr-1 font-semibold" :style="{ color: TEAM_COLOR }">공식</span>
-                <span v-else class="mr-1 text-muted">{{ membersById[s.memberId]?.name || '' }}</span>
+                <span v-else class="mr-1 font-semibold text-ink">{{ membersById[s.memberId]?.name || '' }}</span>
                 {{ s.title }}
               </span>
-              <span class="shrink-0 text-sm text-muted">{{ s.type === 'fixed' ? '변경불가' : '변경가능' }}</span>
+              <span class="shrink-0 text-sm font-medium text-ink">{{ s.type === 'fixed' ? '변경불가' : '변경가능' }}</span>
             </button>
           </li>
         </ul>
