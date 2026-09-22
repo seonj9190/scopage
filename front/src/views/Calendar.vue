@@ -426,9 +426,9 @@ function editFromDayList(schedule) {
 
     <!-- Day list modal -->
     <div v-if="dayListOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" @click.self="closeDayList">
-      <div class="w-full max-w-md bg-base p-6 shadow-lg">
+      <div class="w-full max-w-lg bg-base p-6 shadow-lg">
         <div class="mb-4 flex items-center justify-between">
-          <h3 class="text-lg text-ink">{{ dayListDateLabel }}</h3>
+          <h3 class="text-xl text-ink">{{ dayListDateLabel }}</h3>
           <button type="button" class="text-muted hover:text-ink" @click="closeDayList">닫기</button>
         </div>
 
@@ -436,18 +436,18 @@ function editFromDayList(schedule) {
           <li v-for="s in dayListSchedules" :key="s.id">
             <button
               type="button"
-              class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent-soft"
+              class="flex w-full items-center gap-3 px-4 py-3 text-left text-base hover:bg-accent-soft"
               @click="editFromDayList(s)"
             >
               <img
                 v-if="!s.isTeam && membersById[s.memberId]?.photoUrl"
                 :src="membersById[s.memberId].photoUrl"
-                class="h-6 w-6 shrink-0 rounded-full object-cover"
+                class="h-11 w-11 shrink-0 rounded-full object-cover"
                 :alt="`${membersById[s.memberId]?.name || ''} 프로필 사진`"
               />
               <span
                 v-else
-                class="h-2.5 w-2.5 shrink-0 rounded-full"
+                class="h-11 w-11 shrink-0 rounded-full"
                 :style="{ backgroundColor: s.isTeam ? TEAM_COLOR : membersById[s.memberId]?.color || '#888' }"
               />
               <span class="min-w-0 flex-1 truncate">
@@ -455,7 +455,7 @@ function editFromDayList(schedule) {
                 <span v-else class="mr-1 text-muted">{{ membersById[s.memberId]?.name || '' }}</span>
                 {{ s.title }}
               </span>
-              <span class="shrink-0 text-xs text-muted">{{ s.type === 'fixed' ? '변경불가' : '변경가능' }}</span>
+              <span class="shrink-0 text-sm text-muted">{{ s.type === 'fixed' ? '변경불가' : '변경가능' }}</span>
             </button>
           </li>
         </ul>
