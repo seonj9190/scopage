@@ -275,12 +275,41 @@ function chipStyle(schedule) {
   return { backgroundColor: `${color}1A`, color, borderColor: color, borderStyle: 'dashed' }
 }
 
-// Team schedules aren't tied to one member, so there's no photo to show for
-// them — they keep the text chip. A member without an uploaded photo also
-// falls back to text.
-function photoFor(schedule) {
-  if (schedule.isTeam) return null
-  return membersById.value[schedule.memberId]?.photoUrl || null
+// ---- Day list modal ----
+// Clicking a day cell opens this (instead of jumping straight into the
+// create form) so a busy, narrow cell doesn't need to show full chips —
+// it only needs enough to glance at, and the list has room to be readable.
+
+const dayListOpen = ref(false)
+const dayListDate = ref(null)
+
+const dayListDateLabel = computed(() => {
+  if (!dayListDate.value) return ''
+  const d = dayListDate.value
+  return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 (${WEEKDAYS[d.getDay()]})`
+})
+
+const dayListSchedules = computed(() => (dayListDate.value ? schedulesOn(dayListDate.value) : []))
+
+function openDayList(d) {
+  dayListDate.value = d
+  dayListOpen.value = true
+}
+
+function closeDayList() {
+  dayListOpen.value = false
+  dayListDate.value = null
+}
+
+function addFromDayList() {
+  const d = dayListDate.value
+  closeDayList()
+  openCreate(d)
+}
+
+function editFromDayList(schedule) {
+  closeDayList()
+  openEdit(schedule)
 }
 </script>
 
@@ -312,17 +341,6 @@ function photoFor(schedule) {
       <button type="button" class="border border-line px-3 py-1.5 text-sm text-ink hover:bg-accent-soft" @click="goToday">오늘</button>
     </div>
 
-    <div v-if="members.length" class="mb-4 flex flex-wrap gap-x-4 gap-y-2 text-xs">
-      <span class="inline-flex items-center gap-1.5">
-        <span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: TEAM_COLOR }" />
-        팀 공식 일정
-      </span>
-      <span v-for="m in members" :key="m.id" class="inline-flex items-center gap-1.5">
-        <span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: m.color }" />
-        {{ m.name }}
-      </span>
-    </div>
-
     <div v-if="loading" class="py-16 text-center text-muted">불러오는 중...</div>
 
     <div v-else class="border border-line">
@@ -342,7 +360,7 @@ function photoFor(schedule) {
           :key="d.toISOString()"
           class="min-h-28 cursor-pointer border-b border-r border-line p-1.5 align-top hover:bg-accent-soft/50"
           :class="!isCurrentMonth(d) ? 'bg-base/50 text-muted/60' : ''"
-          @click="openCreate(d)"
+          @click="openDayList(d)"
         >
           <div
             class="mb-1 text-xs"
@@ -351,26 +369,18 @@ function photoFor(schedule) {
             {{ d.getDate() }}
           </div>
           <div class="space-y-1">
-            <button
-              v-for="s in schedulesOn(d)"
-              :key="s.id"
-              type="button"
-              class="flex w-full items-center rounded border"
-              :class="photoFor(s) ? 'justify-center p-0.5' : 'truncate px-1.5 py-0.5 text-left text-[11px]'"
-              :style="chipStyle(s)"
-              :title="`${s.isTeam ? '팀 공식 일정' : membersById[s.memberId]?.name || ''} · ${s.title}`"
-              @click.stop="openEdit(s)"
-            >
-              <img
-                v-if="photoFor(s)"
-                :src="photoFor(s)"
-                class="h-5 w-5 rounded-sm object-cover"
-                :alt="`${membersById[s.memberId]?.name || ''} 프로필 사진`"
-              />
-              <template v-else>
-                <span v-if="s.isTeam" class="mr-1 font-semibold">[공식]</span>{{ s.title }}
-              </template>
-            </button>
+            <div v-for="s in schedulesOn(d)" :key="s.id">
+              <p v-if="s.isTeam" class="truncate text-[11px] font-semibold" :style="{ color: TEAM_COLOR }">
+                공식
+              </p>
+              <p
+                v-else
+                class="truncate rounded border px-1.5 py-0.5 text-left text-[11px]"
+                :style="chipStyle(s)"
+              >
+                {{ membersById[s.memberId]?.name || '' }}
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -379,6 +389,42 @@ function photoFor(schedule) {
     <p class="mt-4 text-xs text-muted">
       실선 배경은 <strong>변경 불가</strong> 일정, 점선 테두리는 <strong>변경 가능</strong> 일정입니다.
     </p>
+
+    <!-- Day list modal -->
+    <div v-if="dayListOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" @click.self="closeDayList">
+      <div class="w-full max-w-md bg-base p-6 shadow-lg">
+        <div class="mb-4 flex items-center justify-between">
+          <h3 class="text-lg text-ink">{{ dayListDateLabel }}</h3>
+          <button type="button" class="text-muted hover:text-ink" @click="closeDayList">닫기</button>
+        </div>
+
+        <ul v-if="dayListSchedules.length" class="mb-4 divide-y divide-line border border-line">
+          <li v-for="s in dayListSchedules" :key="s.id">
+            <button
+              type="button"
+              class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent-soft"
+              @click="editFromDayList(s)"
+            >
+              <span
+                class="h-2.5 w-2.5 shrink-0 rounded-full"
+                :style="{ backgroundColor: s.isTeam ? TEAM_COLOR : membersById[s.memberId]?.color || '#888' }"
+              />
+              <span class="min-w-0 flex-1 truncate">
+                <span v-if="s.isTeam" class="mr-1 font-semibold" :style="{ color: TEAM_COLOR }">공식</span>
+                <span v-else class="mr-1 text-muted">{{ membersById[s.memberId]?.name || '' }}</span>
+                {{ s.title }}
+              </span>
+              <span class="shrink-0 text-xs text-muted">{{ s.type === 'fixed' ? '변경불가' : '변경가능' }}</span>
+            </button>
+          </li>
+        </ul>
+        <p v-else class="mb-4 text-sm text-muted">등록된 일정이 없습니다.</p>
+
+        <button type="button" class="w-full bg-ink px-4 py-2 text-sm text-base hover:bg-accent" @click="addFromDayList">
+          일정 추가
+        </button>
+      </div>
+    </div>
 
     <!-- Create / edit modal -->
     <div v-if="modalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" @click.self="closeModal">
