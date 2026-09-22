@@ -1,19 +1,21 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import PageHero from '@/components/PageHero.vue'
 import SectionTitle from '@/components/SectionTitle.vue'
-import { conductor } from '@/data/members.js'
 
-const members = ref([])
+const roster = ref([])
 const loading = ref(true)
+
+const conductor = computed(() => roster.value.find((m) => m.isConductor) || null)
+const members = computed(() => roster.value.filter((m) => !m.isConductor))
 
 onMounted(async () => {
   try {
     const res = await fetch('/api/public/members')
     const data = await res.json()
-    members.value = data.members || []
+    roster.value = data.members || []
   } catch {
-    members.value = []
+    roster.value = []
   } finally {
     loading.value = false
   }
@@ -28,12 +30,13 @@ onMounted(async () => {
       description="서귀포챔버오케스트라를 이끌어가는 지휘자와 단원들을 소개합니다."
     />
 
-    <section class="mx-auto max-w-6xl px-6 py-20 lg:px-8">
+    <section v-if="loading || conductor" class="mx-auto max-w-6xl px-6 py-20 lg:px-8">
       <SectionTitle eyebrow="Conductor" title="음악감독, 상임지휘" />
-      <div class="grid gap-8 sm:grid-cols-[240px_1fr] ">
+      <p v-if="loading" class="text-sm text-muted">불러오는 중...</p>
+      <div v-else class="grid gap-8 sm:grid-cols-[240px_1fr] ">
         <div class="flex items-center justify-center">
           <img
-          :src="conductor.photo"
+          :src="conductor.photoUrl"
           :alt="`${conductor.name} 프로필 사진`"
           class="h-auto w-full max-w-xs object-contain"
           loading="lazy"
@@ -42,9 +45,9 @@ onMounted(async () => {
 
         <div>
           <p class="text-lg text-ink">{{ conductor.name }}</p>
-          <p class="mt-1 text-sm text-accent">{{ conductor.role }}</p>
-          <p class="mt-4 max-w-xl text-sm leading-relaxed text-muted">{{ conductor.exp1 }}</p>
-          <p class="mt-2 max-w-xl text-sm leading-relaxed text-muted">{{ conductor.exp2 }}</p>
+          <p class="mt-1 text-sm text-accent">{{ conductor.part }}</p>
+          <p class="mt-4 max-w-xl text-sm leading-relaxed text-muted">{{ conductor.bio1 }}</p>
+          <p class="mt-2 max-w-xl text-sm leading-relaxed text-muted">{{ conductor.bio2 }}</p>
         </div>
       </div>
     </section>

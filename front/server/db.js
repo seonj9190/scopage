@@ -48,6 +48,7 @@ async function initSchema() {
       bio2 VARCHAR(500) NULL,
       photo_url VARCHAR(255) NULL,
       is_public TINYINT(1) NOT NULL DEFAULT 0,
+      is_conductor TINYINT(1) NOT NULL DEFAULT 0,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `)
@@ -57,6 +58,7 @@ async function initSchema() {
   await ensureColumn('members', 'bio1', 'bio1 VARCHAR(500) NULL')
   await ensureColumn('members', 'bio2', 'bio2 VARCHAR(500) NULL')
   await ensureColumn('members', 'photo_url', 'photo_url VARCHAR(255) NULL')
+  await ensureColumn('members', 'is_conductor', 'is_conductor TINYINT(1) NOT NULL DEFAULT 0')
   await ensureColumn('members', 'is_public', 'is_public TINYINT(1) NOT NULL DEFAULT 0')
   await pool.query(`
     CREATE TABLE IF NOT EXISTS schedules (
@@ -118,6 +120,7 @@ function rowToMember(row) {
     bio2: row.bio2,
     photoUrl: row.photo_url,
     isPublic: !!row.is_public,
+    isConductor: !!row.is_conductor,
     createdAt: row.created_at,
   }
 }
@@ -164,7 +167,7 @@ function rowToFile(row) {
 
 function publicMember(member) {
   if (!member) return null
-  const { id, username, name, color, isAdmin, isActive, part, bio1, bio2, photoUrl, isPublic } = member
+  const { id, username, name, color, isAdmin, isActive, part, bio1, bio2, photoUrl, isPublic, isConductor } = member
   return {
     id,
     username,
@@ -177,6 +180,7 @@ function publicMember(member) {
     bio2,
     photoUrl,
     isPublic: !!isPublic,
+    isConductor: !!isConductor,
   }
 }
 
@@ -184,8 +188,8 @@ function publicMember(member) {
 // active flags, just what a visitor to the site should see.
 function publicProfile(member) {
   if (!member) return null
-  const { id, name, part, bio1, bio2, photoUrl } = member
-  return { id, name, part, bio1, bio2, photoUrl }
+  const { id, name, part, bio1, bio2, photoUrl, isConductor } = member
+  return { id, name, part, bio1, bio2, photoUrl, isConductor: !!isConductor }
 }
 
 const db = {
@@ -221,6 +225,7 @@ const db = {
     bio2 = null,
     photoUrl = null,
     isPublic = false,
+    isConductor = false,
   }) {
     const [[{ count }]] = await pool.query('SELECT COUNT(*) AS count FROM members')
     const color = COLOR_PALETTE[count % COLOR_PALETTE.length]
@@ -228,9 +233,13 @@ const db = {
     try {
       await pool.execute(
         `INSERT INTO members
-           (id, username, password_hash, name, color, is_admin, is_active, part, bio1, bio2, photo_url, is_public)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, username, passwordHash, name, color, isAdmin ? 1 : 0, isActive ? 1 : 0, part, bio1, bio2, photoUrl, isPublic ? 1 : 0]
+           (id, username, password_hash, name, color, is_admin, is_active, part, bio1, bio2, photo_url, is_public, is_conductor)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id, username, passwordHash, name, color,
+          isAdmin ? 1 : 0, isActive ? 1 : 0, part, bio1, bio2, photoUrl,
+          isPublic ? 1 : 0, isConductor ? 1 : 0,
+        ]
       )
     } catch (err) {
       if (err.code === 'ER_DUP_ENTRY') throw new Error('이미 존재하는 아이디입니다.')
@@ -278,10 +287,21 @@ const db = {
       fields.push('is_public = ?')
       values.push(patch.isPublic ? 1 : 0)
     }
+    if (patch.isConductor !== undefined) {
+      fields.push('is_conductor = ?')
+      values.push(patch.isConductor ? 1 : 0)
+    }
     if (!fields.length) return db.getMemberById(id)
     values.push(id)
     await pool.execute(`UPDATE members SET ${fields.join(', ')} WHERE id = ?`, values)
     return db.getMemberById(id)
+  },
+
+  // Enforces at most one conductor: call before/after granting the flag to
+  // `id` so an admin flipping a new conductor on can't leave the old one
+  // still marked, which would otherwise silently show two "지휘자" entries.
+  async clearConductorExcept(id) {
+    await pool.execute('UPDATE members SET is_conductor = 0 WHERE id != ?', [id])
   },
 
   async getPublicMembers() {

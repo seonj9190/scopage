@@ -11,7 +11,17 @@ const errorMsg = ref('')
 const successMsg = ref('')
 
 function emptyCreateForm() {
-  return { username: '', password: '', name: '', isAdmin: false, part: '', bio1: '', bio2: '', isPublic: true }
+  return {
+    username: '',
+    password: '',
+    name: '',
+    isAdmin: false,
+    part: '',
+    bio1: '',
+    bio2: '',
+    isPublic: true,
+    isConductor: false,
+  }
 }
 
 const form = ref(emptyCreateForm())
@@ -103,7 +113,7 @@ async function toggleActive(member) {
 // ---- Profile edit (part / bio / photo / public) ----
 
 const editProfileFor = ref(null)
-const profileForm = ref({ part: '', bio1: '', bio2: '', isPublic: false })
+const profileForm = ref({ part: '', bio1: '', bio2: '', isPublic: false, isConductor: false })
 const editPhotoInput = ref(null)
 const savingProfile = ref(false)
 
@@ -114,6 +124,7 @@ function openProfileEdit(member) {
     bio1: member.bio1 || '',
     bio2: member.bio2 || '',
     isPublic: member.isPublic,
+    isConductor: member.isConductor,
   }
 }
 
@@ -168,9 +179,13 @@ async function submitProfileEdit(member) {
         <input v-model="form.bio1" type="text" placeholder="소개 1 (선택)" class="border border-line px-3 py-2 text-sm sm:col-span-2" />
         <input v-model="form.bio2" type="text" placeholder="소개 2 (선택)" class="border border-line px-3 py-2 text-sm sm:col-span-2" />
 
-        <label class="inline-flex items-center gap-2 text-sm text-muted sm:col-span-2">
+        <label class="inline-flex items-center gap-2 text-sm text-muted">
           <input v-model="form.isPublic" type="checkbox" />
           단원소개 페이지에 공개
+        </label>
+        <label class="inline-flex items-center gap-2 text-sm text-muted">
+          <input v-model="form.isConductor" type="checkbox" />
+          지휘자로 지정
         </label>
 
         <button
@@ -202,6 +217,7 @@ async function submitProfileEdit(member) {
               <span v-if="m.part" class="text-xs text-accent">{{ m.part }}</span>
               <span v-if="m.isAdmin" class="text-xs text-accent">관리자</span>
               <span v-if="m.isPublic" class="text-xs text-emerald-600">공개</span>
+              <span v-if="m.isConductor" class="text-xs text-accent">지휘자</span>
               <span v-if="!m.isActive" class="text-xs text-rose-600">비활성</span>
             </div>
 
@@ -247,6 +263,10 @@ async function submitProfileEdit(member) {
             <label class="inline-flex items-center gap-2 text-xs text-muted">
               <input v-model="profileForm.isPublic" type="checkbox" />
               단원소개 페이지에 공개
+            </label>
+            <label class="inline-flex items-center gap-2 text-xs text-muted">
+              <input v-model="profileForm.isConductor" type="checkbox" />
+              지휘자로 지정
             </label>
             <button
               type="submit"

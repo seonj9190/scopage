@@ -180,7 +180,7 @@ router.post(
   requireAdmin,
   uploadPhoto,
   h(async (req, res) => {
-    const { username, password, name, isAdmin, part, bio1, bio2, isPublic } = req.body || {}
+    const { username, password, name, isAdmin, part, bio1, bio2, isPublic, isConductor } = req.body || {}
     if (!username || !password || !name) {
       if (req.file) await fs.promises.unlink(req.file.path).catch(() => {})
       return res.status(400).json({ error: '아이디, 비밀번호, 이름을 입력하세요.' })
@@ -196,7 +196,9 @@ router.post(
         bio2: bio2 || null,
         photoUrl: req.file ? `/profile-photos/${req.file.filename}` : null,
         isPublic: isPublic === 'true' || isPublic === true,
+        isConductor: isConductor === 'true' || isConductor === true,
       })
+      if (member.isConductor) await db.clearConductorExcept(member.id)
       res.status(201).json({ member: db.publicMember(member) })
     } catch (err) {
       if (req.file) await fs.promises.unlink(req.file.path).catch(() => {})
@@ -234,9 +236,11 @@ router.put(
     if ('bio1' in body) patch.bio1 = body.bio1 || null
     if ('bio2' in body) patch.bio2 = body.bio2 || null
     if ('isPublic' in body) patch.isPublic = toBool(body.isPublic)
+    if ('isConductor' in body) patch.isConductor = toBool(body.isConductor)
     if (req.file) patch.photoUrl = `/profile-photos/${req.file.filename}`
 
     const member = await db.updateMember(req.params.id, patch)
+    if (patch.isConductor) await db.clearConductorExcept(member.id)
 
     // Clean up the old photo file only if we replaced it with a new upload
     // and the old one was one of ours (never touch legacy /img/ paths).
