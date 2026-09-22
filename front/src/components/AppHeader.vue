@@ -15,7 +15,9 @@ const baseNavItems = [
 ]
 
 const navItems = computed(() =>
-  authState.member ? [...baseNavItems, { to: '/calendar', label: '캘린더' }] : baseNavItems
+  authState.member
+    ? [...baseNavItems, { to: '/calendar', label: '캘린더' }, { to: '/resources', label: '자료실' }]
+    : baseNavItems
 )
 
 const isOpen = ref(false)

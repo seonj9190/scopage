@@ -21,7 +21,13 @@ function loadOrCreateSecret() {
 const JWT_SECRET = loadOrCreateSecret()
 
 const COOKIE_NAME = 'scopage_token'
-const TOKEN_TTL = '30d'
+// 400 days is the practical cap most browsers enforce on cookie lifetime.
+// Sessions are refreshed on every authenticated request (see requireAuth),
+// so as long as a member keeps visiting within this window, they never see
+// an expiry — only an explicit logout clears the session.
+const TOKEN_TTL_DAYS = 400
+const TOKEN_TTL = `${TOKEN_TTL_DAYS}d`
+const COOKIE_MAX_AGE = TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000
 
 function hashPassword(password) {
   return bcrypt.hashSync(password, 10)
@@ -40,7 +46,7 @@ function setAuthCookie(req, res, token) {
     httpOnly: true,
     sameSite: 'lax',
     secure: req.secure,
-    maxAge: 30 * 24 * 60 * 60 * 1000,
+    maxAge: COOKIE_MAX_AGE,
   })
 }
 
@@ -56,6 +62,9 @@ async function requireAuth(req, res, next) {
     const member = await db.getMemberById(payload.sub)
     if (!member) return res.status(401).json({ error: '로그인이 필요합니다.' })
     req.member = member
+    // Sliding session: every authenticated request pushes the expiry back
+    // out, so an active member is never signed out by a fixed timeout.
+    setAuthCookie(req, res, issueToken(member))
     next()
   } catch {
     return res.status(401).json({ error: '로그인이 필요합니다.' })

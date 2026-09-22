@@ -1,5 +1,8 @@
+const fs = require('node:fs')
+const path = require('node:path')
 const express = require('express')
 const db = require('./db')
+const { UPLOAD_DIR, uploadSingle } = require('./upload')
 const {
   hashPassword,
   verifyPassword,
@@ -168,6 +171,116 @@ router.put(
     const member = await db.updateMember(req.params.id, patch)
     if (!member) return res.status(404).json({ error: '멤버를 찾을 수 없습니다.' })
     res.json({ member: db.publicMember(member) })
+  })
+)
+
+// ---- Resource library: folders & files ----
+
+router.get(
+  '/folders',
+  requireAuth,
+  h(async (_req, res) => {
+    res.json({ folders: await db.getFolders() })
+  })
+)
+
+router.post(
+  '/folders',
+  requireAuth,
+  h(async (req, res) => {
+    const name = (req.body?.name || '').trim()
+    if (!name) return res.status(400).json({ error: '폴더 이름을 입력하세요.' })
+    const folder = await db.createFolder({ name, createdBy: req.member.id })
+    res.status(201).json({ folder })
+  })
+)
+
+router.delete(
+  '/folders/:id',
+  requireAuth,
+  requireAdmin,
+  h(async (req, res) => {
+    const folder = await db.getFolderById(req.params.id)
+    if (!folder) return res.status(404).json({ error: '폴더를 찾을 수 없습니다.' })
+    const files = await db.getFilesByFolder(folder.id)
+    await db.deleteFolder(folder.id) // cascades and removes the file rows too
+    await Promise.all(
+      files.map((f) => fs.promises.unlink(path.join(UPLOAD_DIR, f.storedName)).catch(() => {}))
+    )
+    res.json({ ok: true })
+  })
+)
+
+router.get(
+  '/folders/:id/files',
+  requireAuth,
+  h(async (req, res) => {
+    const folder = await db.getFolderById(req.params.id)
+    if (!folder) return res.status(404).json({ error: '폴더를 찾을 수 없습니다.' })
+    res.json({ files: await db.getFilesByFolder(folder.id) })
+  })
+)
+
+router.post(
+  '/folders/:id/files',
+  requireAuth,
+  uploadSingle,
+  h(async (req, res) => {
+    const folder = await db.getFolderById(req.params.id)
+    if (!folder) {
+      if (req.file) await fs.promises.unlink(req.file.path).catch(() => {})
+      return res.status(404).json({ error: '폴더를 찾을 수 없습니다.' })
+    }
+    if (!req.file) return res.status(400).json({ error: '업로드할 파일을 선택하세요.' })
+
+    const title = (req.body.title || '').trim() || path.parse(req.file.originalname).name
+    const file = await db.createFile({
+      folderId: folder.id,
+      title,
+      originalName: req.file.originalname,
+      storedName: req.file.filename,
+      size: req.file.size,
+      uploadedBy: req.member.id,
+    })
+    res.status(201).json({ file })
+  })
+)
+
+router.get(
+  '/files/:id/download',
+  requireAuth,
+  h(async (req, res) => {
+    const file = await db.getFileById(req.params.id)
+    if (!file) return res.status(404).json({ error: '파일을 찾을 수 없습니다.' })
+
+    const ext = path.extname(file.originalName)
+    const downloadName = file.title.toLowerCase().endsWith(ext.toLowerCase())
+      ? file.title
+      : `${file.title}${ext}`
+
+    // Express 5's res.download() no longer infers Content-Type from the
+    // download filename (only from the on-disk path), and stored files are
+    // saved without an extension — so set it explicitly here.
+    if (ext) res.type(ext)
+
+    res.download(path.join(UPLOAD_DIR, file.storedName), downloadName, (err) => {
+      if (err && !res.headersSent) res.status(404).json({ error: '파일을 찾을 수 없습니다.' })
+    })
+  })
+)
+
+router.delete(
+  '/files/:id',
+  requireAuth,
+  h(async (req, res) => {
+    const file = await db.getFileById(req.params.id)
+    if (!file) return res.status(404).json({ error: '파일을 찾을 수 없습니다.' })
+    if (file.uploadedBy !== req.member.id && !req.member.isAdmin) {
+      return res.status(403).json({ error: '삭제 권한이 없습니다.' })
+    }
+    await db.deleteFile(file.id)
+    await fs.promises.unlink(path.join(UPLOAD_DIR, file.storedName)).catch(() => {})
+    res.json({ ok: true })
   })
 )
 

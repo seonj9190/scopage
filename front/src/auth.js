@@ -6,10 +6,13 @@ const state = reactive({
 })
 
 async function api(path, options = {}) {
+  // FormData (file uploads) must NOT get a manual Content-Type — the browser
+  // needs to set its own multipart boundary.
+  const isFormData = options.body instanceof FormData
   const res = await fetch(`/api${path}`, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers: isFormData ? options.headers : { 'Content-Type': 'application/json', ...options.headers },
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {

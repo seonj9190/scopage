@@ -57,6 +57,12 @@ const routes = [
     meta: { title: '단원 캘린더', requiresAuth: true },
   },
   {
+    path: '/resources',
+    name: 'Resources',
+    component: () => import('../views/Resources.vue'),
+    meta: { title: '단원 자료실', requiresAuth: true },
+  },
+  {
     path: '/admin/members',
     name: 'AdminMembers',
     component: () => import('../views/AdminMembers.vue'),

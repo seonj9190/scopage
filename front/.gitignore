@@ -40,3 +40,6 @@ __screenshots__/
 
 # Auto-generated auth signing secret (server-side runtime state)
 /data/
+
+# Uploaded resource-library files (server-side runtime state)
+/uploads/

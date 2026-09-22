@@ -48,6 +48,29 @@ async function initSchema() {
       FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS folders (
+      id CHAR(36) PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      created_by CHAR(36) NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES members(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS files (
+      id CHAR(36) PRIMARY KEY,
+      folder_id CHAR(36) NOT NULL,
+      title VARCHAR(200) NOT NULL,
+      original_name VARCHAR(255) NOT NULL,
+      stored_name VARCHAR(255) NOT NULL,
+      size INT NOT NULL,
+      uploaded_by CHAR(36) NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE CASCADE,
+      FOREIGN KEY (uploaded_by) REFERENCES members(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `)
 }
 
 const ready = initSchema()
@@ -77,6 +100,30 @@ function rowToSchedule(row) {
     type: row.type,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  }
+}
+
+function rowToFolder(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    name: row.name,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+  }
+}
+
+function rowToFile(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    folderId: row.folder_id,
+    title: row.title,
+    originalName: row.original_name,
+    storedName: row.stored_name,
+    size: row.size,
+    uploadedBy: row.uploaded_by,
+    createdAt: row.created_at,
   }
 }
 
@@ -195,6 +242,54 @@ const db = {
 
   async deleteSchedule(id) {
     const [result] = await pool.execute('DELETE FROM schedules WHERE id = ?', [id])
+    return result.affectedRows > 0
+  },
+
+  async getFolders() {
+    const [rows] = await pool.query('SELECT * FROM folders ORDER BY name ASC')
+    return rows.map(rowToFolder)
+  },
+
+  async getFolderById(id) {
+    const [rows] = await pool.execute('SELECT * FROM folders WHERE id = ?', [id])
+    return rowToFolder(rows[0])
+  },
+
+  async createFolder({ name, createdBy }) {
+    const id = crypto.randomUUID()
+    await pool.execute('INSERT INTO folders (id, name, created_by) VALUES (?, ?, ?)', [id, name, createdBy])
+    return db.getFolderById(id)
+  },
+
+  async deleteFolder(id) {
+    const [result] = await pool.execute('DELETE FROM folders WHERE id = ?', [id])
+    return result.affectedRows > 0
+  },
+
+  async getFilesByFolder(folderId) {
+    const [rows] = await pool.execute(
+      'SELECT * FROM files WHERE folder_id = ? ORDER BY created_at DESC',
+      [folderId]
+    )
+    return rows.map(rowToFile)
+  },
+
+  async getFileById(id) {
+    const [rows] = await pool.execute('SELECT * FROM files WHERE id = ?', [id])
+    return rowToFile(rows[0])
+  },
+
+  async createFile({ folderId, title, originalName, storedName, size, uploadedBy }) {
+    const id = crypto.randomUUID()
+    await pool.execute(
+      'INSERT INTO files (id, folder_id, title, original_name, stored_name, size, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [id, folderId, title, originalName, storedName, size, uploadedBy]
+    )
+    return db.getFileById(id)
+  },
+
+  async deleteFile(id) {
+    const [result] = await pool.execute('DELETE FROM files WHERE id = ?', [id])
     return result.affectedRows > 0
   },
 
