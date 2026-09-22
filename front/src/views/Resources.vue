@@ -94,27 +94,36 @@ async function removeFolder(folder) {
 const fileInput = ref(null)
 const uploadTitle = ref('')
 const uploading = ref(false)
+const uploadProgress = ref('')
 
 async function uploadFile() {
-  const selected = fileInput.value?.files?.[0]
-  if (!selected || !activeFolderId.value) return
+  const selected = Array.from(fileInput.value?.files || [])
+  if (!selected.length || !activeFolderId.value) return
   uploading.value = true
   errorMsg.value = ''
+  // A custom title only makes sense for a single file; with multiple files
+  // each one keeps its own filename as the title (server default).
+  const customTitle = selected.length === 1 ? uploadTitle.value.trim() : ''
+
   try {
-    const form = new FormData()
-    form.append('file', selected)
-    if (uploadTitle.value.trim()) form.append('title', uploadTitle.value.trim())
-    const { file } = await api(`/folders/${activeFolderId.value}/files`, {
-      method: 'POST',
-      body: form,
-    })
-    files.value.unshift(file)
+    for (let i = 0; i < selected.length; i++) {
+      uploadProgress.value = selected.length > 1 ? `업로드 중... (${i + 1}/${selected.length})` : '업로드 중...'
+      const form = new FormData()
+      form.append('file', selected[i])
+      if (customTitle) form.append('title', customTitle)
+      const { file } = await api(`/folders/${activeFolderId.value}/files`, {
+        method: 'POST',
+        body: form,
+      })
+      files.value.unshift(file)
+    }
     uploadTitle.value = ''
     fileInput.value.value = ''
   } catch (err) {
     errorMsg.value = err.message
   } finally {
     uploading.value = false
+    uploadProgress.value = ''
   }
 }
 
@@ -202,11 +211,11 @@ function formatDate(iso) {
         </div>
         <template v-else>
           <form class="mb-6 flex flex-wrap items-center gap-2 border border-line p-3" @submit.prevent="uploadFile">
-            <input ref="fileInput" type="file" required class="flex-1 text-sm" />
+            <input ref="fileInput" type="file" multiple required class="flex-1 text-sm" />
             <input
               v-model="uploadTitle"
               type="text"
-              placeholder="제목 (선택, 비우면 파일명 사용)"
+              placeholder="제목 (파일 1개 선택 시만 적용, 비우면 파일명 사용)"
               class="min-w-0 flex-1 border border-line px-2 py-1.5 text-sm"
             />
             <button
@@ -214,7 +223,7 @@ function formatDate(iso) {
               :disabled="uploading"
               class="shrink-0 bg-ink px-4 py-1.5 text-sm text-base hover:bg-accent disabled:opacity-50"
             >
-              {{ uploading ? '업로드 중...' : '업로드' }}
+              {{ uploading ? (uploadProgress || '업로드 중...') : '업로드' }}
             </button>
           </form>
 
