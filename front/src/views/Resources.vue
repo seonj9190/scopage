@@ -92,38 +92,36 @@ async function removeFolder(folder) {
 // ---- File upload / delete ----
 
 const fileInput = ref(null)
-const uploadTitle = ref('')
 const uploading = ref(false)
 const uploadProgress = ref('')
+
+function pickFiles() {
+  fileInput.value?.click()
+}
 
 async function uploadFile() {
   const selected = Array.from(fileInput.value?.files || [])
   if (!selected.length || !activeFolderId.value) return
   uploading.value = true
   errorMsg.value = ''
-  // A custom title only makes sense for a single file; with multiple files
-  // each one keeps its own filename as the title (server default).
-  const customTitle = selected.length === 1 ? uploadTitle.value.trim() : ''
 
   try {
     for (let i = 0; i < selected.length; i++) {
       uploadProgress.value = selected.length > 1 ? `업로드 중... (${i + 1}/${selected.length})` : '업로드 중...'
       const form = new FormData()
       form.append('file', selected[i])
-      if (customTitle) form.append('title', customTitle)
       const { file } = await api(`/folders/${activeFolderId.value}/files`, {
         method: 'POST',
         body: form,
       })
       files.value.unshift(file)
     }
-    uploadTitle.value = ''
-    fileInput.value.value = ''
   } catch (err) {
     errorMsg.value = err.message
   } finally {
     uploading.value = false
     uploadProgress.value = ''
+    fileInput.value.value = ''
   }
 }
 
@@ -210,26 +208,9 @@ function formatDate(iso) {
           왼쪽에서 폴더를 선택하거나 새로 만들어주세요.
         </div>
         <template v-else>
-          <form class="mb-6 flex flex-wrap items-center gap-2 border border-line p-3" @submit.prevent="uploadFile">
-            <input ref="fileInput" type="file" multiple required class="flex-1 text-sm" />
-            <input
-              v-model="uploadTitle"
-              type="text"
-              placeholder="제목 (파일 1개 선택 시만 적용, 비우면 파일명 사용)"
-              class="min-w-0 flex-1 border border-line px-2 py-1.5 text-sm"
-            />
-            <button
-              type="submit"
-              :disabled="uploading"
-              class="shrink-0 bg-ink px-4 py-1.5 text-sm text-base hover:bg-accent disabled:opacity-50"
-            >
-              {{ uploading ? (uploadProgress || '업로드 중...') : '업로드' }}
-            </button>
-          </form>
-
           <div v-if="loadingFiles" class="text-sm text-muted">불러오는 중...</div>
-          <p v-else-if="!files.length" class="text-sm text-muted">아직 업로드된 파일이 없습니다.</p>
-          <ul v-else class="divide-y divide-line border border-line">
+          <p v-else-if="!files.length" class="mb-4 text-sm text-muted">아직 업로드된 파일이 없습니다.</p>
+          <ul v-else class="mb-4 divide-y divide-line border border-line">
             <li v-for="file in files" :key="file.id" class="flex items-center justify-between gap-4 px-4 py-3">
               <div class="min-w-0">
                 <a
@@ -253,6 +234,25 @@ function formatDate(iso) {
               </button>
             </li>
           </ul>
+
+          <input ref="fileInput" type="file" multiple class="hidden" @change="uploadFile" />
+          <button
+            type="button"
+            :disabled="uploading"
+            class="inline-flex items-center gap-2 border border-line px-4 py-2 text-sm text-ink hover:bg-accent-soft disabled:opacity-50"
+            @click="pickFiles"
+          >
+            <svg viewBox="0 0 20 20" fill="none" class="h-4 w-4 shrink-0" aria-hidden="true">
+              <path
+                d="M10 3v10m0-10 3.5 3.5M10 3 6.5 6.5M4 14v1.5A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5V14"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            {{ uploading ? (uploadProgress || '업로드 중...') : '파일 업로드' }}
+          </button>
         </template>
       </section>
     </div>
