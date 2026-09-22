@@ -15,6 +15,8 @@ const viewYear = ref(today.getFullYear())
 const viewMonth = ref(today.getMonth()) // 0-based
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
+// Official team schedules aren't tied to one member's color.
+const TEAM_COLOR = '#7a6a4f'
 
 const monthLabel = computed(() => `${viewYear.value}년 ${viewMonth.value + 1}월`)
 
@@ -55,6 +57,12 @@ function isCurrentMonth(d) {
 
 function isToday(d) {
   return toDateOnly(d) === toDateOnly(today)
+}
+
+function weekdayTextClass(d) {
+  if (d.getDay() === 0) return 'text-rose-600'
+  if (d.getDay() === 6) return 'text-blue-600'
+  return ''
 }
 
 function prevMonth() {
@@ -105,6 +113,10 @@ function emptyForm(dateStr = toDateOnly(today)) {
     endDate: dateStr,
     startTime: '09:00',
     endTime: '18:00',
+    assignedMemberId: authState.member?.id || null,
+    isTeam: false,
+    repeat: 'none', // 'none' | 'weekly' | 'monthly' — only offered when creating
+    repeatUntil: '',
   }
 }
 
@@ -124,6 +136,8 @@ function openEdit(schedule) {
     endDate: schedule.end.slice(0, 10),
     startTime: schedule.allDay ? '09:00' : schedule.start.slice(11, 16),
     endTime: schedule.allDay ? '18:00' : schedule.end.slice(11, 16),
+    assignedMemberId: schedule.memberId,
+    isTeam: schedule.isTeam,
   }
   modalOpen.value = true
 }
@@ -138,27 +152,95 @@ const canEditCurrent = computed(() => {
   return s && (s.memberId === authState.member?.id || authState.member?.isAdmin)
 })
 
-async function submitForm() {
-  const payload = {
-    title: form.value.title.trim(),
-    type: form.value.type,
-    allDay: form.value.allDay,
-    start: form.value.allDay ? form.value.startDate : `${form.value.startDate}T${form.value.startTime}`,
-    end: form.value.allDay ? form.value.endDate : `${form.value.endDate}T${form.value.endTime}`,
+// Repeat is only offered when creating a new schedule; each occurrence is
+// created as its own independent schedule (no shared series/group).
+const MAX_OCCURRENCES = 104
+
+function parseDateOnly(str) {
+  const [y, m, d] = str.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+function addDays(dateStr, days) {
+  const d = parseDateOnly(dateStr)
+  d.setDate(d.getDate() + days)
+  return toDateOnly(d)
+}
+
+function addMonths(dateStr, months) {
+  const d = parseDateOnly(dateStr)
+  const day = d.getDate()
+  d.setDate(1) // avoid rolling into the wrong month while setMonth normalizes
+  d.setMonth(d.getMonth() + months)
+  const lastDayOfTargetMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+  d.setDate(Math.min(day, lastDayOfTargetMonth))
+  return toDateOnly(d)
+}
+
+function buildOccurrences(startDate, endDate, repeat, repeatUntil) {
+  if (repeat === 'none') return [{ startDate, endDate }]
+  const spanDays = Math.round((parseDateOnly(endDate) - parseDateOnly(startDate)) / 86400000)
+  const occurrences = []
+  for (let i = 0; occurrences.length <= MAX_OCCURRENCES; i++) {
+    const occStart = repeat === 'weekly' ? addDays(startDate, i * 7) : addMonths(startDate, i)
+    if (occStart > repeatUntil) break
+    occurrences.push({ startDate: occStart, endDate: addDays(occStart, spanDays) })
   }
-  if (!payload.title) {
+  return occurrences
+}
+
+async function submitForm() {
+  const title = form.value.title.trim()
+  if (!title) {
     errorMsg.value = '제목을 입력하세요.'
     return
   }
-  if (payload.end < payload.start) {
+  if (form.value.endDate < form.value.startDate) {
     errorMsg.value = '종료일이 시작일보다 빠를 수 없습니다.'
     return
   }
+
+  const isRepeating = !editingId.value && form.value.repeat !== 'none'
+  if (isRepeating) {
+    if (!form.value.repeatUntil) {
+      errorMsg.value = '반복 종료일을 선택하세요.'
+      return
+    }
+    if (form.value.repeatUntil < form.value.startDate) {
+      errorMsg.value = '반복 종료일이 시작일보다 빠를 수 없습니다.'
+      return
+    }
+  }
+
+  const occurrences = isRepeating
+    ? buildOccurrences(form.value.startDate, form.value.endDate, form.value.repeat, form.value.repeatUntil)
+    : [{ startDate: form.value.startDate, endDate: form.value.endDate }]
+
+  if (occurrences.length > MAX_OCCURRENCES) {
+    errorMsg.value = `반복 일정이 너무 많습니다 (최대 ${MAX_OCCURRENCES}개). 반복 종료일을 앞당겨주세요.`
+    return
+  }
+
+  const buildPayload = (startDate, endDate) => ({
+    title,
+    type: form.value.type,
+    allDay: form.value.allDay,
+    start: form.value.allDay ? startDate : `${startDate}T${form.value.startTime}`,
+    end: form.value.allDay ? endDate : `${endDate}T${form.value.endTime}`,
+    isTeam: form.value.isTeam,
+    memberId: form.value.assignedMemberId,
+  })
+
   try {
     if (editingId.value) {
-      await api(`/schedules/${editingId.value}`, { method: 'PUT', body: JSON.stringify(payload) })
+      await api(`/schedules/${editingId.value}`, {
+        method: 'PUT',
+        body: JSON.stringify(buildPayload(form.value.startDate, form.value.endDate)),
+      })
     } else {
-      await api('/schedules', { method: 'POST', body: JSON.stringify(payload) })
+      for (const occ of occurrences) {
+        await api('/schedules', { method: 'POST', body: JSON.stringify(buildPayload(occ.startDate, occ.endDate)) })
+      }
     }
     closeModal()
     await loadAll()
@@ -180,7 +262,7 @@ async function removeCurrent() {
 }
 
 function chipStyle(schedule) {
-  const color = membersById.value[schedule.memberId]?.color || '#888'
+  const color = schedule.isTeam ? TEAM_COLOR : membersById.value[schedule.memberId]?.color || '#888'
   if (schedule.type === 'fixed') {
     return { backgroundColor: color, color: '#fff', borderColor: color }
   }
@@ -217,6 +299,10 @@ function chipStyle(schedule) {
     </div>
 
     <div v-if="members.length" class="mb-4 flex flex-wrap gap-x-4 gap-y-2 text-xs">
+      <span class="inline-flex items-center gap-1.5">
+        <span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: TEAM_COLOR }" />
+        팀 공식 일정
+      </span>
       <span v-for="m in members" :key="m.id" class="inline-flex items-center gap-1.5">
         <span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: m.color }" />
         {{ m.name }}
@@ -227,7 +313,14 @@ function chipStyle(schedule) {
 
     <div v-else class="border border-line">
       <div class="grid grid-cols-7 border-b border-line bg-accent-soft text-center text-xs text-muted">
-        <div v-for="w in WEEKDAYS" :key="w" class="py-2">{{ w }}</div>
+        <div
+          v-for="(w, idx) in WEEKDAYS"
+          :key="w"
+          class="py-2"
+          :class="idx === 0 ? 'text-rose-600' : idx === 6 ? 'text-blue-600' : ''"
+        >
+          {{ w }}
+        </div>
       </div>
       <div class="grid grid-cols-7">
         <div
@@ -237,7 +330,10 @@ function chipStyle(schedule) {
           :class="!isCurrentMonth(d) ? 'bg-base/50 text-muted/60' : ''"
           @click="openCreate(d)"
         >
-          <div class="mb-1 text-xs" :class="isToday(d) ? 'font-semibold text-accent' : ''">
+          <div
+            class="mb-1 text-xs"
+            :class="isToday(d) ? 'font-semibold text-accent' : (isCurrentMonth(d) ? weekdayTextClass(d) : '')"
+          >
             {{ d.getDate() }}
           </div>
           <div class="space-y-1">
@@ -247,10 +343,10 @@ function chipStyle(schedule) {
               type="button"
               class="block w-full truncate rounded border px-1.5 py-0.5 text-left text-[11px]"
               :style="chipStyle(s)"
-              :title="`${membersById[s.memberId]?.name || ''} · ${s.title}`"
+              :title="`${s.isTeam ? '팀 공식 일정' : membersById[s.memberId]?.name || ''} · ${s.title}`"
               @click.stop="openEdit(s)"
             >
-              {{ s.title }}
+              <span v-if="s.isTeam" class="mr-1 font-semibold">[공식]</span>{{ s.title }}
             </button>
           </div>
         </div>
@@ -278,6 +374,24 @@ function chipStyle(schedule) {
               :disabled="!canEditCurrent"
               class="w-full border border-line px-3 py-2 text-sm outline-none focus:border-accent disabled:bg-accent-soft"
             />
+          </div>
+
+          <div v-if="authState.member?.isAdmin">
+            <label class="inline-flex items-center gap-1.5 text-sm">
+              <input v-model="form.isTeam" type="checkbox" :disabled="!canEditCurrent" />
+              팀 공식 일정으로 등록
+            </label>
+          </div>
+
+          <div v-if="authState.member?.isAdmin && !form.isTeam">
+            <label class="mb-1 block text-xs text-muted">담당 멤버</label>
+            <select
+              v-model="form.assignedMemberId"
+              :disabled="!canEditCurrent"
+              class="w-full border border-line px-2 py-1.5 text-sm disabled:bg-accent-soft"
+            >
+              <option v-for="m in members" :key="m.id" :value="m.id">{{ m.name }}</option>
+            </select>
           </div>
 
           <div>
@@ -318,6 +432,31 @@ function chipStyle(schedule) {
             <div>
               <label class="mb-1 block text-xs text-muted">종료 시간</label>
               <input v-model="form.endTime" type="time" :disabled="!canEditCurrent" class="w-full border border-line px-2 py-1.5 text-sm" />
+            </div>
+          </div>
+
+          <div v-if="!editingId">
+            <label class="mb-1 block text-xs text-muted">반복</label>
+            <div class="flex items-center gap-2">
+              <select
+                v-model="form.repeat"
+                :disabled="!canEditCurrent"
+                class="border border-line px-2 py-1.5 text-sm"
+              >
+                <option value="none">반복 안 함</option>
+                <option value="weekly">매주</option>
+                <option value="monthly">매월</option>
+              </select>
+              <template v-if="form.repeat !== 'none'">
+                <span class="text-xs text-muted">~까지</span>
+                <input
+                  v-model="form.repeatUntil"
+                  type="date"
+                  :min="form.startDate"
+                  :disabled="!canEditCurrent"
+                  class="flex-1 border border-line px-2 py-1.5 text-sm"
+                />
+              </template>
             </div>
           </div>
 

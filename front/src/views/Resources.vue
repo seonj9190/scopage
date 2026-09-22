@@ -214,7 +214,7 @@ function formatDate(iso) {
       <!-- File list -->
       <section>
         <div v-if="!activeFolderId" class="py-10 text-center text-sm text-muted">
-          왼쪽에서 폴더를 선택하거나 새로 만들어주세요.
+          폴더를 선택하면 업로드된 파일을 확인할 수 있습니다.
         </div>
         <template v-else>
           <div v-if="loadingFiles" class="text-sm text-muted">불러오는 중...</div>

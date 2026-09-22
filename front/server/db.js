@@ -22,6 +22,17 @@ const pool = mysql.createPool({
   charset: 'utf8mb4',
 })
 
+async function ensureColumn(table, column, definition) {
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+    [table, column]
+  )
+  if (rows[0].cnt === 0) {
+    await pool.query(`ALTER TABLE ${table} ADD COLUMN ${definition}`)
+  }
+}
+
 async function initSchema() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS members (
@@ -43,11 +54,15 @@ async function initSchema() {
       end_at VARCHAR(19) NOT NULL,
       all_day TINYINT(1) NOT NULL DEFAULT 1,
       type ENUM('fixed', 'flexible') NOT NULL,
+      is_team TINYINT(1) NOT NULL DEFAULT 0,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `)
+  // Existing deployments created the table before is_team existed —
+  // add it if this is an upgrade rather than a fresh install.
+  await ensureColumn('schedules', 'is_team', 'is_team TINYINT(1) NOT NULL DEFAULT 0')
   await pool.query(`
     CREATE TABLE IF NOT EXISTS folders (
       id CHAR(36) PRIMARY KEY,
@@ -98,6 +113,7 @@ function rowToSchedule(row) {
     end: row.end_at,
     allDay: !!row.all_day,
     type: row.type,
+    isTeam: !!row.is_team,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -202,11 +218,11 @@ const db = {
     return rowToSchedule(rows[0])
   },
 
-  async createSchedule({ memberId, title, start, end, allDay, type }) {
+  async createSchedule({ memberId, title, start, end, allDay, type, isTeam = false }) {
     const id = crypto.randomUUID()
     await pool.execute(
-      'INSERT INTO schedules (id, member_id, title, start_at, end_at, all_day, type) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [id, memberId, title, start, end, allDay ? 1 : 0, type]
+      'INSERT INTO schedules (id, member_id, title, start_at, end_at, all_day, type, is_team) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, memberId, title, start, end, allDay ? 1 : 0, type, isTeam ? 1 : 0]
     )
     return db.getScheduleById(id)
   },
@@ -233,6 +249,14 @@ const db = {
     if (patch.type !== undefined) {
       fields.push('type = ?')
       values.push(patch.type)
+    }
+    if (patch.isTeam !== undefined) {
+      fields.push('is_team = ?')
+      values.push(patch.isTeam ? 1 : 0)
+    }
+    if (patch.memberId !== undefined) {
+      fields.push('member_id = ?')
+      values.push(patch.memberId)
     }
     if (!fields.length) return db.getScheduleById(id)
     values.push(id)

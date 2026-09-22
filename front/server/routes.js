@@ -71,20 +71,34 @@ router.post(
   '/schedules',
   requireAuth,
   h(async (req, res) => {
-    const { title, start, end, allDay, type } = req.body || {}
+    const { title, start, end, allDay, type, isTeam, memberId } = req.body || {}
     if (!title || !start || !end) {
       return res.status(400).json({ error: '제목과 일정 기간을 입력하세요.' })
     }
     if (type !== 'fixed' && type !== 'flexible') {
       return res.status(400).json({ error: '일정 유형이 올바르지 않습니다.' })
     }
+    if (isTeam && !req.member.isAdmin) {
+      return res.status(403).json({ error: '팀 공식 일정은 관리자만 등록할 수 있습니다.' })
+    }
+
+    // Admins may create a schedule on behalf of another member; everyone
+    // else can only create their own.
+    let ownerId = req.member.id
+    if (req.member.isAdmin && memberId && !isTeam) {
+      const target = await db.getMemberById(memberId)
+      if (!target) return res.status(400).json({ error: '멤버를 찾을 수 없습니다.' })
+      ownerId = target.id
+    }
+
     const schedule = await db.createSchedule({
-      memberId: req.member.id,
+      memberId: ownerId,
       title,
       start,
       end,
       allDay,
       type,
+      isTeam: req.member.isAdmin ? !!isTeam : false,
     })
     res.status(201).json({ schedule })
   })
@@ -102,11 +116,24 @@ router.put(
     if (!existing) return res.status(404).json({ error: '일정을 찾을 수 없습니다.' })
     if (!canModify(req, existing)) return res.status(403).json({ error: '수정 권한이 없습니다.' })
 
-    const { title, start, end, allDay, type } = req.body || {}
+    const { title, start, end, allDay, type, isTeam, memberId } = req.body || {}
     if (type && type !== 'fixed' && type !== 'flexible') {
       return res.status(400).json({ error: '일정 유형이 올바르지 않습니다.' })
     }
-    const schedule = await db.updateSchedule(req.params.id, { title, start, end, allDay, type })
+
+    const patch = { title, start, end, allDay, type }
+
+    // Only admins may reassign ownership or flip the team-schedule flag.
+    if (req.member.isAdmin) {
+      if (typeof isTeam === 'boolean') patch.isTeam = isTeam
+      if (memberId) {
+        const target = await db.getMemberById(memberId)
+        if (!target) return res.status(400).json({ error: '멤버를 찾을 수 없습니다.' })
+        patch.memberId = target.id
+      }
+    }
+
+    const schedule = await db.updateSchedule(req.params.id, patch)
     res.json({ schedule })
   })
 )
