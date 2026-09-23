@@ -408,13 +408,13 @@ function editFromDayList(schedule) {
               </div>
               <p
                 v-else
-                class="flex items-center justify-center truncate rounded border px-1.5 py-0.5 text-left text-[11px]"
+                class="flex items-center justify-center truncate rounded border px-1 py-0.5 text-left text-[11px]"
                 :style="chipStyle(s)"
               >
                 <img
                   v-if="membersById[s.memberId]?.thumbnailUrl"
                   :src="membersById[s.memberId].thumbnailUrl"
-                  class="h-4 w-4 rounded-full object-cover"
+                  class="h-7 w-7 rounded-full object-cover"
                   :alt="membersById[s.memberId]?.name || ''"
                 />
                 <template v-else>
