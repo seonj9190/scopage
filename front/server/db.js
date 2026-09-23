@@ -63,6 +63,7 @@ async function initSchema() {
   await ensureColumn('members', 'bio1', 'bio1 VARCHAR(500) NULL')
   await ensureColumn('members', 'bio2', 'bio2 VARCHAR(500) NULL')
   await ensureColumn('members', 'photo_url', 'photo_url VARCHAR(255) NULL')
+  await ensureColumn('members', 'thumbnail_url', 'thumbnail_url VARCHAR(255) NULL')
   await ensureColumn('members', 'is_conductor', 'is_conductor TINYINT(1) NOT NULL DEFAULT 0')
   await ensureColumn('members', 'is_public', 'is_public TINYINT(1) NOT NULL DEFAULT 0')
   const hadDisplayOrder = await ensureColumn('members', 'display_order', 'display_order INT NOT NULL DEFAULT 0')
@@ -137,6 +138,7 @@ function rowToMember(row) {
     bio1: row.bio1,
     bio2: row.bio2,
     photoUrl: row.photo_url,
+    thumbnailUrl: row.thumbnail_url,
     isPublic: !!row.is_public,
     isConductor: !!row.is_conductor,
     displayOrder: row.display_order,
@@ -186,7 +188,7 @@ function rowToFile(row) {
 
 function publicMember(member) {
   if (!member) return null
-  const { id, username, name, color, isAdmin, isActive, part, bio1, bio2, photoUrl, isPublic, isConductor, displayOrder } = member
+  const { id, username, name, color, isAdmin, isActive, part, bio1, bio2, photoUrl, thumbnailUrl, isPublic, isConductor, displayOrder } = member
   return {
     id,
     username,
@@ -198,6 +200,7 @@ function publicMember(member) {
     bio1,
     bio2,
     photoUrl,
+    thumbnailUrl,
     isPublic: !!isPublic,
     isConductor: !!isConductor,
     displayOrder,
@@ -244,6 +247,7 @@ const db = {
     bio1 = null,
     bio2 = null,
     photoUrl = null,
+    thumbnailUrl = null,
     isPublic = false,
     isConductor = false,
   }) {
@@ -255,11 +259,11 @@ const db = {
     try {
       await pool.execute(
         `INSERT INTO members
-           (id, username, password_hash, name, color, is_admin, is_active, part, bio1, bio2, photo_url, is_public, is_conductor, display_order)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (id, username, password_hash, name, color, is_admin, is_active, part, bio1, bio2, photo_url, thumbnail_url, is_public, is_conductor, display_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id, username, passwordHash, name, color,
-          isAdmin ? 1 : 0, isActive ? 1 : 0, part, bio1, bio2, photoUrl,
+          isAdmin ? 1 : 0, isActive ? 1 : 0, part, bio1, bio2, photoUrl, thumbnailUrl,
           isPublic ? 1 : 0, isConductor ? 1 : 0, maxOrder + 1,
         ]
       )
@@ -308,6 +312,10 @@ const db = {
     if (patch.photoUrl !== undefined) {
       fields.push('photo_url = ?')
       values.push(patch.photoUrl)
+    }
+    if (patch.thumbnailUrl !== undefined) {
+      fields.push('thumbnail_url = ?')
+      values.push(patch.thumbnailUrl)
     }
     if (patch.isPublic !== undefined) {
       fields.push('is_public = ?')

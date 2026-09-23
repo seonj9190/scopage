@@ -2,7 +2,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const express = require('express')
 const db = require('./db')
-const { UPLOAD_DIR, uploadSingle, PROFILE_UPLOAD_DIR, uploadPhoto } = require('./upload')
+const { UPLOAD_DIR, uploadSingle, PROFILE_UPLOAD_DIR, THUMBNAIL_UPLOAD_DIR, uploadMemberPhotos } = require('./upload')
 const {
   hashPassword,
   verifyPassword,
@@ -174,15 +174,27 @@ router.get(
   })
 )
 
+// multer .fields() keys uploads by fieldname; pull the single file out of each.
+function uploadedFile(req, field) {
+  return req.files?.[field]?.[0] || null
+}
+
+async function unlinkUploaded(req) {
+  const files = [uploadedFile(req, 'photo'), uploadedFile(req, 'thumbnail')].filter(Boolean)
+  await Promise.all(files.map((f) => fs.promises.unlink(f.path).catch(() => {})))
+}
+
 router.post(
   '/admin/members',
   requireAuth,
   requireAdmin,
-  uploadPhoto,
+  uploadMemberPhotos,
   h(async (req, res) => {
     const { username, password, name, isAdmin, part, bio1, bio2, isPublic, isConductor } = req.body || {}
+    const photoFile = uploadedFile(req, 'photo')
+    const thumbnailFile = uploadedFile(req, 'thumbnail')
     if (!username || !password || !name) {
-      if (req.file) await fs.promises.unlink(req.file.path).catch(() => {})
+      await unlinkUploaded(req)
       return res.status(400).json({ error: '아이디, 비밀번호, 이름을 입력하세요.' })
     }
     try {
@@ -194,14 +206,15 @@ router.post(
         part: part || null,
         bio1: bio1 || null,
         bio2: bio2 || null,
-        photoUrl: req.file ? `/profile-photos/${req.file.filename}` : null,
+        photoUrl: photoFile ? `/profile-photos/${photoFile.filename}` : null,
+        thumbnailUrl: thumbnailFile ? `/thumbnails/${thumbnailFile.filename}` : null,
         isPublic: isPublic === 'true' || isPublic === true,
         isConductor: isConductor === 'true' || isConductor === true,
       })
       if (member.isConductor) await db.clearConductorExcept(member.id)
       res.status(201).json({ member: db.publicMember(member) })
     } catch (err) {
-      if (req.file) await fs.promises.unlink(req.file.path).catch(() => {})
+      await unlinkUploaded(req)
       res.status(409).json({ error: err.message })
     }
   })
@@ -226,19 +239,21 @@ router.put(
   '/admin/members/:id',
   requireAuth,
   requireAdmin,
-  uploadPhoto,
+  uploadMemberPhotos,
   h(async (req, res) => {
     const body = req.body || {}
     const toBool = (v) => v === 'true' || v === true
+    const photoFile = uploadedFile(req, 'photo')
+    const thumbnailFile = uploadedFile(req, 'thumbnail')
 
     if ('isActive' in body && !toBool(body.isActive) && req.params.id === req.member.id) {
-      if (req.file) await fs.promises.unlink(req.file.path).catch(() => {})
+      await unlinkUploaded(req)
       return res.status(400).json({ error: '본인 계정은 비활성화할 수 없습니다.' })
     }
 
     const existing = await db.getMemberById(req.params.id)
     if (!existing) {
-      if (req.file) await fs.promises.unlink(req.file.path).catch(() => {})
+      await unlinkUploaded(req)
       return res.status(404).json({ error: '멤버를 찾을 수 없습니다.' })
     }
 
@@ -253,22 +268,27 @@ router.put(
     if ('bio2' in body) patch.bio2 = body.bio2 || null
     if ('isPublic' in body) patch.isPublic = toBool(body.isPublic)
     if ('isConductor' in body) patch.isConductor = toBool(body.isConductor)
-    if (req.file) patch.photoUrl = `/profile-photos/${req.file.filename}`
+    if (photoFile) patch.photoUrl = `/profile-photos/${photoFile.filename}`
+    if (thumbnailFile) patch.thumbnailUrl = `/thumbnails/${thumbnailFile.filename}`
 
     let member
     try {
       member = await db.updateMember(req.params.id, patch)
     } catch (err) {
-      if (req.file) await fs.promises.unlink(req.file.path).catch(() => {})
+      await unlinkUploaded(req)
       return res.status(409).json({ error: err.message })
     }
     if (patch.isConductor) await db.clearConductorExcept(member.id)
 
-    // Clean up the old photo file only if we replaced it with a new upload
-    // and the old one was one of ours (never touch legacy /img/ paths).
-    if (req.file && existing.photoUrl?.startsWith('/profile-photos/')) {
+    // Clean up the old file only if we replaced it with a new upload and the
+    // old one was one of ours (never touch legacy /img/ paths).
+    if (photoFile && existing.photoUrl?.startsWith('/profile-photos/')) {
       const oldFilename = existing.photoUrl.replace('/profile-photos/', '')
       await fs.promises.unlink(path.join(PROFILE_UPLOAD_DIR, oldFilename)).catch(() => {})
+    }
+    if (thumbnailFile && existing.thumbnailUrl?.startsWith('/thumbnails/')) {
+      const oldFilename = existing.thumbnailUrl.replace('/thumbnails/', '')
+      await fs.promises.unlink(path.join(THUMBNAIL_UPLOAD_DIR, oldFilename)).catch(() => {})
     }
 
     res.json({ member: db.publicMember(member) })

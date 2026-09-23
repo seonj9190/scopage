@@ -46,22 +46,37 @@ const IMAGE_EXTENSIONS = {
   'image/gif': '.gif',
 }
 
-const uploadPhotoRaw = multer({
+// Calendar-chip thumbnails are a separate image from the profile photo —
+// tiny, shown instead of a member's name on the day-cell chips.
+const THUMBNAIL_UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'thumbnails')
+fs.mkdirSync(THUMBNAIL_UPLOAD_DIR, { recursive: true })
+
+const memberPhotoFilter = (_req, file, cb) => {
+  if (!IMAGE_EXTENSIONS[file.mimetype]) {
+    return cb(new Error('이미지 파일(JPG, PNG, WEBP, GIF)만 업로드할 수 있습니다.'))
+  }
+  cb(null, true)
+}
+
+// A single multer instance handles both fields since they only differ by
+// destination directory — routed per-file via file.fieldname.
+const memberPhotosRaw = multer({
   storage: multer.diskStorage({
-    destination: PROFILE_UPLOAD_DIR,
+    destination: (_req, file, cb) => {
+      cb(null, file.fieldname === 'thumbnail' ? THUMBNAIL_UPLOAD_DIR : PROFILE_UPLOAD_DIR)
+    },
     filename: (_req, file, cb) => cb(null, crypto.randomUUID() + (IMAGE_EXTENSIONS[file.mimetype] || '')),
   }),
   limits: { fileSize: MAX_PHOTO_SIZE },
-  fileFilter: (_req, file, cb) => {
-    if (!IMAGE_EXTENSIONS[file.mimetype]) {
-      return cb(new Error('이미지 파일(JPG, PNG, WEBP, GIF)만 업로드할 수 있습니다.'))
-    }
-    cb(null, true)
-  },
+  fileFilter: memberPhotoFilter,
 })
 
-function uploadPhoto(req, res, next) {
-  uploadPhotoRaw.single('photo')(req, res, (err) => {
+// Populates req.files.photo[0] / req.files.thumbnail[0] when present.
+function uploadMemberPhotos(req, res, next) {
+  memberPhotosRaw.fields([
+    { name: 'photo', maxCount: 1 },
+    { name: 'thumbnail', maxCount: 1 },
+  ])(req, res, (err) => {
     if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({ error: '사진 용량은 5MB를 넘을 수 없습니다.' })
     }
@@ -70,4 +85,4 @@ function uploadPhoto(req, res, next) {
   })
 }
 
-module.exports = { UPLOAD_DIR, uploadSingle, PROFILE_UPLOAD_DIR, uploadPhoto }
+module.exports = { UPLOAD_DIR, uploadSingle, PROFILE_UPLOAD_DIR, THUMBNAIL_UPLOAD_DIR, uploadMemberPhotos }
