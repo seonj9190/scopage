@@ -207,6 +207,21 @@ router.post(
   })
 )
 
+// Registered before /admin/members/:id so "order" isn't swallowed as an id.
+router.put(
+  '/admin/members/order',
+  requireAuth,
+  requireAdmin,
+  h(async (req, res) => {
+    const { orderedIds } = req.body || {}
+    if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+      return res.status(400).json({ error: '정렬할 멤버 목록이 필요합니다.' })
+    }
+    await db.reorderMembers(orderedIds)
+    res.json({ members: (await db.getMembers()).map(db.publicMember) })
+  })
+)
+
 router.put(
   '/admin/members/:id',
   requireAuth,

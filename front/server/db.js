@@ -22,15 +22,20 @@ const pool = mysql.createPool({
   charset: 'utf8mb4',
 })
 
+// Returns true if the column already existed, false if it was just added —
+// callers use this to run one-off backfills only on the migration that adds
+// the column.
 async function ensureColumn(table, column, definition) {
   const [rows] = await pool.query(
     `SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
     [table, column]
   )
-  if (rows[0].cnt === 0) {
+  const existed = rows[0].cnt > 0
+  if (!existed) {
     await pool.query(`ALTER TABLE ${table} ADD COLUMN ${definition}`)
   }
+  return existed
 }
 
 async function initSchema() {
@@ -60,6 +65,19 @@ async function initSchema() {
   await ensureColumn('members', 'photo_url', 'photo_url VARCHAR(255) NULL')
   await ensureColumn('members', 'is_conductor', 'is_conductor TINYINT(1) NOT NULL DEFAULT 0')
   await ensureColumn('members', 'is_public', 'is_public TINYINT(1) NOT NULL DEFAULT 0')
+  const hadDisplayOrder = await ensureColumn('members', 'display_order', 'display_order INT NOT NULL DEFAULT 0')
+  if (!hadDisplayOrder) {
+    // Backfill existing rows so the roster order doesn't change until an
+    // admin deliberately reorders it — mirrors the old implicit ordering.
+    await pool.query(`
+      UPDATE members
+      JOIN (
+        SELECT id, ROW_NUMBER() OVER (ORDER BY created_at ASC, username ASC) AS rn
+        FROM members
+      ) ranked ON ranked.id = members.id
+      SET members.display_order = ranked.rn
+    `)
+  }
   await pool.query(`
     CREATE TABLE IF NOT EXISTS schedules (
       id CHAR(36) PRIMARY KEY,
@@ -121,6 +139,7 @@ function rowToMember(row) {
     photoUrl: row.photo_url,
     isPublic: !!row.is_public,
     isConductor: !!row.is_conductor,
+    displayOrder: row.display_order,
     createdAt: row.created_at,
   }
 }
@@ -167,7 +186,7 @@ function rowToFile(row) {
 
 function publicMember(member) {
   if (!member) return null
-  const { id, username, name, color, isAdmin, isActive, part, bio1, bio2, photoUrl, isPublic, isConductor } = member
+  const { id, username, name, color, isAdmin, isActive, part, bio1, bio2, photoUrl, isPublic, isConductor, displayOrder } = member
   return {
     id,
     username,
@@ -181,6 +200,7 @@ function publicMember(member) {
     photoUrl,
     isPublic: !!isPublic,
     isConductor: !!isConductor,
+    displayOrder,
   }
 }
 
@@ -200,7 +220,7 @@ const db = {
   },
 
   async getMembers() {
-    const [rows] = await pool.query('SELECT * FROM members ORDER BY created_at ASC, username ASC')
+    const [rows] = await pool.query('SELECT * FROM members ORDER BY display_order ASC, created_at ASC, username ASC')
     return rows.map(rowToMember)
   },
 
@@ -227,18 +247,20 @@ const db = {
     isPublic = false,
     isConductor = false,
   }) {
-    const [[{ count }]] = await pool.query('SELECT COUNT(*) AS count FROM members')
+    const [[{ count, maxOrder }]] = await pool.query(
+      'SELECT COUNT(*) AS count, COALESCE(MAX(display_order), 0) AS maxOrder FROM members'
+    )
     const color = COLOR_PALETTE[count % COLOR_PALETTE.length]
     const id = crypto.randomUUID()
     try {
       await pool.execute(
         `INSERT INTO members
-           (id, username, password_hash, name, color, is_admin, is_active, part, bio1, bio2, photo_url, is_public, is_conductor)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (id, username, password_hash, name, color, is_admin, is_active, part, bio1, bio2, photo_url, is_public, is_conductor, display_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id, username, passwordHash, name, color,
           isAdmin ? 1 : 0, isActive ? 1 : 0, part, bio1, bio2, photoUrl,
-          isPublic ? 1 : 0, isConductor ? 1 : 0,
+          isPublic ? 1 : 0, isConductor ? 1 : 0, maxOrder + 1,
         ]
       )
     } catch (err) {
@@ -317,8 +339,18 @@ const db = {
     // is_active only gates login capability, not this — a profile-only
     // entry (never meant to log in) still belongs on the public roster.
     // Admins control public visibility solely through is_public.
-    const [rows] = await pool.query('SELECT * FROM members WHERE is_public = 1 ORDER BY created_at ASC')
+    const [rows] = await pool.query('SELECT * FROM members WHERE is_public = 1 ORDER BY display_order ASC, created_at ASC')
     return rows.map(rowToMember)
+  },
+
+  // Applies an admin-chosen display order: `orderedIds` is the full member
+  // list in its new order, so a member's position is just its index in it.
+  async reorderMembers(orderedIds) {
+    await Promise.all(
+      orderedIds.map((id, index) =>
+        pool.execute('UPDATE members SET display_order = ? WHERE id = ?', [index + 1, id])
+      )
+    )
   },
 
   async getSchedules() {

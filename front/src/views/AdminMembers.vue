@@ -73,6 +73,33 @@ async function createMember() {
   }
 }
 
+const reordering = ref(false)
+
+async function moveMember(member, direction) {
+  const index = members.value.findIndex((m) => m.id === member.id)
+  const swapWith = index + direction
+  if (swapWith < 0 || swapWith >= members.value.length) return
+
+  const reordered = [...members.value]
+  ;[reordered[index], reordered[swapWith]] = [reordered[swapWith], reordered[index]]
+  members.value = reordered
+
+  reordering.value = true
+  errorMsg.value = ''
+  try {
+    const { members: updated } = await api('/admin/members/order', {
+      method: 'PUT',
+      body: JSON.stringify({ orderedIds: reordered.map((m) => m.id) }),
+    })
+    members.value = updated
+  } catch (err) {
+    errorMsg.value = err.message
+    await loadMembers()
+  } finally {
+    reordering.value = false
+  }
+}
+
 const resetPasswordFor = ref(null)
 const newPassword = ref('')
 
@@ -224,6 +251,22 @@ async function submitProfileEdit(member) {
         <li v-for="m in members" :key="m.id" class="px-4 py-3" :class="!m.isActive ? 'opacity-50' : ''">
           <div class="flex items-center justify-between gap-4">
             <div class="flex items-center gap-3">
+              <div class="flex flex-col">
+                <button
+                  type="button"
+                  class="leading-none text-muted hover:text-ink disabled:opacity-30"
+                  :disabled="reordering || m.id === members[0]?.id"
+                  aria-label="위로 이동"
+                  @click="moveMember(m, -1)"
+                >▲</button>
+                <button
+                  type="button"
+                  class="leading-none text-muted hover:text-ink disabled:opacity-30"
+                  :disabled="reordering || m.id === members[members.length - 1]?.id"
+                  aria-label="아래로 이동"
+                  @click="moveMember(m, 1)"
+                >▼</button>
+              </div>
               <img
                 v-if="m.photoUrl"
                 :src="m.photoUrl"
