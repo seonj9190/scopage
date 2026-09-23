@@ -349,6 +349,12 @@ function editFromDayList(schedule) {
         <RouterLink v-if="authState.member?.isAdmin" to="/admin/members" class="text-accent hover:underline">
           멤버 관리
         </RouterLink>
+        <RouterLink v-if="authState.member?.isAdmin" to="/admin/gallery" class="text-accent hover:underline">
+          갤러리 관리
+        </RouterLink>
+        <RouterLink v-if="authState.member?.isAdmin" to="/admin/performances" class="text-accent hover:underline">
+          공연 관리
+        </RouterLink>
         <button type="button" class="text-muted hover:text-ink" @click="logout">로그아웃</button>
       </div>
     </div>

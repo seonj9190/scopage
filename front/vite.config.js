@@ -21,6 +21,13 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': 'http://127.0.0.1:3000',
+      // Uploaded files (profile/gallery photos, resource files) are served
+      // directly by the backend, not through /api — in production server.cjs
+      // serves everything from one origin, but the Vite dev server needs
+      // these proxied explicitly or they 404 into the SPA fallback instead.
+      '/profile-photos': 'http://127.0.0.1:3000',
+      '/gallery-photos': 'http://127.0.0.1:3000',
+      '/posters': 'http://127.0.0.1:3000',
     },
   },
 })

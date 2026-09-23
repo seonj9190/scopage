@@ -2,14 +2,29 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import PageHero from '@/components/PageHero.vue'
 import SectionTitle from '@/components/SectionTitle.vue'
-import { performances } from '@/data/performances.js'
 
 const today = new Date()
+
+const performances = ref([])
+const loading = ref(true)
+
+onMounted(async () => {
+  try {
+    const res = await fetch('/api/public/performances')
+    const data = await res.json()
+    performances.value = data.performances || []
+  } catch {
+    performances.value = []
+  } finally {
+    loading.value = false
+  }
+})
 
 const selectedImage = ref(null)
 
 function openImage(perf) {
-  selectedImage.value = { src: perf.poster, alt: `${perf.title} 포스터` }
+  if (!perf.posterUrl) return
+  selectedImage.value = { src: perf.posterUrl, alt: `${perf.title} 포스터` }
 }
 function closeImage() {
   selectedImage.value = null
@@ -21,12 +36,12 @@ onMounted(() => window.addEventListener('keydown', handleKeydown))
 onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
 
 const upcoming = computed(() =>
-  performances
+  performances.value
     .filter((p) => new Date(p.date) >= today)
     .sort((a, b) => new Date(a.date) - new Date(b.date))
 )
 const past = computed(() =>
-  performances
+  performances.value
     .filter((p) => new Date(p.date) < today)
     .sort((a, b) => new Date(b.date) - new Date(a.date))
 )
@@ -47,19 +62,24 @@ function formatDate(dateStr) {
 
     <section class="mx-auto max-w-6xl px-6 py-20 lg:px-8">
       <SectionTitle eyebrow="Upcoming" title="예정된 공연" />
-      <ul class="space-y-10">
+      <p v-if="loading" class="text-sm text-muted">불러오는 중...</p>
+      <ul v-else class="space-y-10">
         <li
           v-for="perf in upcoming"
           :key="perf.id"
           class="grid gap-6 border-b border-line pb-10 sm:grid-cols-[160px_1fr]"
         >
           <img
-            :src="perf.poster"
+            v-if="perf.posterUrl"
+            :src="perf.posterUrl"
             :alt="`${perf.title} 포스터`"
             class="h-auto w-full max-w-[160px] cursor-pointer object-contain"
             loading="lazy"
             @click="openImage(perf)"
           />
+          <div v-else class="flex h-full max-w-[160px] items-center justify-center bg-accent-soft text-xs text-muted">
+            포스터 준비중
+          </div>
           <div>
             <p class="text-xs tracking-[0.2em] text-accent uppercase">
               {{ formatDate(perf.date) }} · {{ perf.time }}
@@ -74,18 +94,22 @@ function formatDate(dateStr) {
       </ul>
     </section>
 
-    <section v-if="past.length" class="border-t border-line bg-accent-soft">
+    <section v-if="!loading && past.length" class="border-t border-line bg-accent-soft">
       <div class="mx-auto max-w-6xl px-6 py-20 lg:px-8">
         <SectionTitle eyebrow="Archive" title="지난 공연" />
         <ul class="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
           <li v-for="perf in past" :key="perf.id">
             <img
-              :src="perf.poster"
+              v-if="perf.posterUrl"
+              :src="perf.posterUrl"
               :alt="`${perf.title} 포스터`"
               class="h-auto w-full cursor-pointer object-contain"
               loading="lazy"
               @click="openImage(perf)"
             />
+            <div v-else class="flex aspect-[3/4] w-full items-center justify-center bg-base text-xs text-muted">
+              포스터 준비중
+            </div>
             <p class="mt-3 text-xs text-accent">{{ formatDate(perf.date) }}</p>
             <p class="mt-1 text-sm text-ink">{{ perf.title }}</p>
             <p class="mt-1 text-xs text-muted">{{ perf.venue }}</p>

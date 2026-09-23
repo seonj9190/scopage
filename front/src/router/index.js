@@ -68,6 +68,18 @@ const routes = [
     component: () => import('../views/AdminMembers.vue'),
     meta: { title: '멤버 관리', requiresAuth: true, requiresAdmin: true },
   },
+  {
+    path: '/admin/gallery',
+    name: 'AdminGallery',
+    component: () => import('../views/AdminGallery.vue'),
+    meta: { title: '갤러리 관리', requiresAuth: true, requiresAdmin: true },
+  },
+  {
+    path: '/admin/performances',
+    name: 'AdminPerformances',
+    component: () => import('../views/AdminPerformances.vue'),
+    meta: { title: '공연 관리', requiresAuth: true, requiresAdmin: true },
+  },
 ]
 
 const router = createRouter({

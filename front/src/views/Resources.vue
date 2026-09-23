@@ -1,7 +1,8 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuth } from '@/auth'
+import ResourceFilePanel from '@/components/ResourceFilePanel.vue'
 
 const { state: authState, api } = useAuth()
 
@@ -53,6 +54,18 @@ onMounted(loadFolders)
 
 const newFolderName = ref('')
 const creatingFolder = ref(false)
+const folderModalOpen = ref(false)
+const newFolderInput = ref(null)
+
+function openFolderModal() {
+  newFolderName.value = ''
+  folderModalOpen.value = true
+  nextTick(() => newFolderInput.value?.focus())
+}
+
+function closeFolderModal() {
+  folderModalOpen.value = false
+}
 
 async function createFolder() {
   const name = newFolderName.value.trim()
@@ -61,8 +74,8 @@ async function createFolder() {
   errorMsg.value = ''
   try {
     const { folder } = await api('/folders', { method: 'POST', body: JSON.stringify({ name }) })
-    newFolderName.value = ''
     folders.value.push(folder)
+    folderModalOpen.value = false
     await selectFolder(folder.id)
   } catch (err) {
     errorMsg.value = err.message
@@ -88,16 +101,18 @@ async function removeFolder(folder) {
 
 // ---- File upload / delete ----
 
-const fileInput = ref(null)
 const uploading = ref(false)
 const uploadProgress = ref('')
 
-function pickFiles() {
-  fileInput.value?.click()
+const currentFolderName = computed(
+  () => folders.value.find((f) => f.id === activeFolderId.value)?.name || ''
+)
+
+function closeFileModal() {
+  activeFolderId.value = null
 }
 
-async function uploadFile() {
-  const selected = Array.from(fileInput.value?.files || [])
+async function uploadFile(selected) {
   if (!selected.length || !activeFolderId.value) return
   uploading.value = true
   errorMsg.value = ''
@@ -118,7 +133,6 @@ async function uploadFile() {
   } finally {
     uploading.value = false
     uploadProgress.value = ''
-    fileInput.value.value = ''
   }
 }
 
@@ -130,20 +144,6 @@ async function removeFile(file) {
   } catch (err) {
     errorMsg.value = err.message
   }
-}
-
-function canDelete(file) {
-  return file.uploadedBy === authState.member?.id || authState.member?.isAdmin
-}
-
-function formatSize(bytes) {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function formatDate(iso) {
-  return new Date(iso).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' })
 }
 </script>
 
@@ -161,33 +161,39 @@ function formatDate(iso) {
       <aside>
         <h2 class="mb-2 text-xs font-medium tracking-wide text-muted uppercase">폴더</h2>
 
-        <form class="mb-4 flex gap-2" @submit.prevent="createFolder">
-          <input
-            v-model="newFolderName"
-            type="text"
-            placeholder="새 폴더 이름"
-            class="min-w-0 flex-1 border border-line px-2 py-1.5 text-sm"
-          />
-          <button
-            type="submit"
-            :disabled="creatingFolder"
-            class="shrink-0 border border-line px-2 py-1.5 text-xs hover:bg-accent-soft disabled:opacity-50"
-          >
-            추가
-          </button>
-        </form>
+        <button
+          type="button"
+          class="mb-4 flex w-full items-center justify-center gap-2 border border-line bg-accent-soft/60 px-4 py-2.5 text-sm font-medium text-ink hover:bg-accent-soft"
+          @click="openFolderModal"
+        >
+          <svg viewBox="0 0 20 20" fill="none" class="h-5 w-5 shrink-0" aria-hidden="true">
+            <path
+              d="M3 6a1.5 1.5 0 0 1 1.5-1.5h3.4a1.5 1.5 0 0 1 1.06.44l1.1 1.1a1.5 1.5 0 0 0 1.06.44h4.38A1.5 1.5 0 0 1 17 8v6.5A1.5 1.5 0 0 1 15.5 16h-11A1.5 1.5 0 0 1 3 14.5V6Z"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <path d="M10 9.5v4M8 11.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+          폴더 추가
+        </button>
 
         <div v-if="loadingFolders" class="text-sm text-muted">불러오는 중...</div>
-        <ul v-else class="space-y-1">
+        <ul v-else class="divide-y divide-line border border-line">
           <li v-for="folder in folders" :key="folder.id">
             <button
               type="button"
-              class="flex w-full items-center justify-between px-3 py-2 text-left text-sm"
-              :class="activeFolderId === folder.id ? 'bg-accent-soft text-ink' : 'text-muted hover:bg-accent-soft/60'"
+              class="flex w-full items-center justify-between border-l-4 px-3 py-3 text-left text-lg sm:py-2.5 sm:text-sm"
+              :class="
+                activeFolderId === folder.id
+                  ? 'border-accent bg-accent-soft text-ink'
+                  : 'border-transparent text-muted hover:bg-accent-soft/60'
+              "
               @click="selectFolder(folder.id)"
             >
               <span class="flex min-w-0 items-center gap-2">
-                <svg viewBox="0 0 20 20" fill="none" class="h-4 w-4 shrink-0 text-muted" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none" class="h-5 w-5 shrink-0 text-muted sm:h-4 sm:w-4" aria-hidden="true">
                   <path
                     d="M3 6a1.5 1.5 0 0 1 1.5-1.5h3.4a1.5 1.5 0 0 1 1.06.44l1.1 1.1a1.5 1.5 0 0 0 1.06.44h4.38A1.5 1.5 0 0 1 17 8v6.5A1.5 1.5 0 0 1 15.5 16h-11A1.5 1.5 0 0 1 3 14.5V6Z"
                     stroke="currentColor"
@@ -201,7 +207,7 @@ function formatDate(iso) {
               <button
                 v-if="authState.member?.isAdmin"
                 type="button"
-                class="ml-2 shrink-0 text-xs text-muted hover:text-rose-600"
+                class="ml-2 shrink-0 text-sm text-muted hover:text-rose-600 sm:text-xs"
                 @click.stop="removeFolder(folder)"
               >
                 삭제
@@ -211,89 +217,79 @@ function formatDate(iso) {
         </ul>
       </aside>
 
-      <!-- File list -->
-      <section>
+      <!-- File list (desktop: inline panel beside the folder list) -->
+      <section class="hidden sm:block">
         <div v-if="!activeFolderId" class="py-10 text-center text-sm text-muted">
           폴더를 선택하면 업로드된 파일을 확인할 수 있습니다.
         </div>
-        <template v-else>
-          <div v-if="loadingFiles" class="text-sm text-muted">불러오는 중...</div>
-          <p v-else-if="!files.length" class="mb-4 text-sm text-muted">아직 업로드된 파일이 없습니다.</p>
-          <ul v-else class="mb-4 divide-y divide-line border border-line">
-            <li v-for="file in files" :key="file.id" class="flex items-center justify-between gap-4 px-4 py-3">
-              <div class="min-w-0">
-                <a
-                  :href="`/api/files/${file.id}/download?inline=1`"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="block truncate text-sm text-ink hover:text-accent hover:underline"
-                >
-                  {{ file.title }}
-                </a>
-                <p class="mt-0.5 text-xs text-muted">
-                  {{ membersById[file.uploadedBy]?.name || '알 수 없음' }} ·
-                  {{ formatDate(file.createdAt) }} · {{ formatSize(file.size) }}
-                </p>
-              </div>
-              <div class="flex shrink-0 items-center gap-1">
-                <a
-                  :href="`/api/files/${file.id}/download`"
-                  class="flex h-8 w-8 items-center justify-center text-muted hover:text-ink"
-                  title="다운로드"
-                  aria-label="다운로드"
-                >
-                  <svg viewBox="0 0 20 20" fill="none" class="h-4 w-4" aria-hidden="true">
-                    <path
-                      d="M10 3v9m0 0 3-3m-3 3-3-3M4 14v1.5A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5V14"
-                      stroke="currentColor"
-                      stroke-width="1.5"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </a>
-                <button
-                  v-if="canDelete(file)"
-                  type="button"
-                  class="flex h-8 w-8 items-center justify-center text-muted hover:text-rose-600"
-                  title="삭제"
-                  aria-label="삭제"
-                  @click="removeFile(file)"
-                >
-                  <svg viewBox="0 0 20 20" fill="none" class="h-4 w-4" aria-hidden="true">
-                    <path
-                      d="M4 6h12M8 6V4.5A1.5 1.5 0 0 1 9.5 3h1A1.5 1.5 0 0 1 12 4.5V6m-6 0 .6 9.4A1.5 1.5 0 0 0 8.1 17h3.8a1.5 1.5 0 0 0 1.5-1.6L14 6M8.5 9v5m3-5v5"
-                      stroke="currentColor"
-                      stroke-width="1.5"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </div>
-            </li>
-          </ul>
-
-          <input ref="fileInput" type="file" multiple class="hidden" @change="uploadFile" />
-          <button
-            type="button"
-            :disabled="uploading"
-            class="inline-flex items-center gap-2 border border-line px-4 py-2 text-sm text-ink hover:bg-accent-soft disabled:opacity-50"
-            @click="pickFiles"
-          >
-            <svg viewBox="0 0 20 20" fill="none" class="h-4 w-4 shrink-0" aria-hidden="true">
-              <path
-                d="M10 3v10m0-10 3.5 3.5M10 3 6.5 6.5M4 14v1.5A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5V14"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-            {{ uploading ? (uploadProgress || '업로드 중...') : '파일 업로드' }}
-          </button>
-        </template>
+        <ResourceFilePanel
+          v-else
+          :files="files"
+          :members-by-id="membersById"
+          :loading="loadingFiles"
+          :uploading="uploading"
+          :upload-progress="uploadProgress"
+          :current-member-id="authState.member?.id"
+          :is-admin="authState.member?.isAdmin"
+          @upload="uploadFile"
+          @remove="removeFile"
+        />
       </section>
+    </div>
+
+    <!-- File list (mobile: modal opened by tapping a folder) -->
+    <div
+      v-if="activeFolderId"
+      class="fixed inset-0 z-50 flex items-end bg-black/40 sm:hidden"
+      @click.self="closeFileModal"
+    >
+      <div class="max-h-[85vh] w-full overflow-y-auto bg-base p-4 shadow-lg">
+        <div class="mb-4 flex items-center justify-between">
+          <h3 class="truncate text-lg text-ink">{{ currentFolderName }}</h3>
+          <button type="button" class="shrink-0 text-sm text-muted hover:text-ink" @click="closeFileModal">닫기</button>
+        </div>
+        <ResourceFilePanel
+          :files="files"
+          :members-by-id="membersById"
+          :loading="loadingFiles"
+          :uploading="uploading"
+          :upload-progress="uploadProgress"
+          :current-member-id="authState.member?.id"
+          :is-admin="authState.member?.isAdmin"
+          @upload="uploadFile"
+          @remove="removeFile"
+        />
+      </div>
+    </div>
+
+    <!-- Folder create modal -->
+    <div
+      v-if="folderModalOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      @click.self="closeFolderModal"
+    >
+      <div class="w-full max-w-sm bg-base p-6 shadow-lg">
+        <div class="mb-4 flex items-center justify-between">
+          <h3 class="text-lg text-ink">새 폴더</h3>
+          <button type="button" class="text-muted hover:text-ink" @click="closeFolderModal">닫기</button>
+        </div>
+        <form class="space-y-4" @submit.prevent="createFolder">
+          <input
+            ref="newFolderInput"
+            v-model="newFolderName"
+            type="text"
+            placeholder="새 폴더 이름"
+            class="w-full border border-line px-3 py-2 text-sm outline-none focus:border-accent"
+          />
+          <button
+            type="submit"
+            :disabled="creatingFolder || !newFolderName.trim()"
+            class="w-full bg-ink px-4 py-2 text-sm text-base hover:bg-accent disabled:opacity-50"
+          >
+            {{ creatingFolder ? '만드는 중...' : '만들기' }}
+          </button>
+        </form>
+      </div>
     </div>
   </div>
 </template>

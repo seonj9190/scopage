@@ -2,7 +2,16 @@ const fs = require('node:fs')
 const path = require('node:path')
 const express = require('express')
 const db = require('./db')
-const { UPLOAD_DIR, uploadSingle, PROFILE_UPLOAD_DIR, uploadPhoto } = require('./upload')
+const {
+  UPLOAD_DIR,
+  uploadSingle,
+  PROFILE_UPLOAD_DIR,
+  uploadPhoto,
+  GALLERY_UPLOAD_DIR,
+  uploadGalleryPhoto,
+  POSTER_UPLOAD_DIR,
+  uploadPoster,
+} = require('./upload')
 const {
   hashPassword,
   verifyPassword,
@@ -56,6 +65,25 @@ router.get(
   '/public/members',
   h(async (_req, res) => {
     res.json({ members: (await db.getPublicMembers()).map(db.publicProfile) })
+  })
+)
+
+// ---- Public gallery (갤러리 page — no login required) ----
+
+router.get(
+  '/public/gallery',
+  h(async (_req, res) => {
+    const [photos, videos] = await Promise.all([db.getGalleryPhotos(), db.getGalleryVideos()])
+    res.json({ photos, videos })
+  })
+)
+
+// ---- Public performance schedule (공연일정 page — no login required) ----
+
+router.get(
+  '/public/performances',
+  h(async (_req, res) => {
+    res.json({ performances: await db.getPerformances() })
   })
 )
 
@@ -257,6 +285,158 @@ router.put(
     }
 
     res.json({ member: db.publicMember(member) })
+  })
+)
+
+// ---- Admin: gallery management ----
+
+function extractYoutubeId(input) {
+  const trimmed = (input || '').trim()
+  if (/^[\w-]{11}$/.test(trimmed)) return trimmed
+  const patterns = [
+    /youtu\.be\/([\w-]{11})/,
+    /youtube\.com\/watch\?v=([\w-]{11})/,
+    /youtube\.com\/embed\/([\w-]{11})/,
+    /youtube\.com\/shorts\/([\w-]{11})/,
+  ]
+  for (const re of patterns) {
+    const match = trimmed.match(re)
+    if (match) return match[1]
+  }
+  return null
+}
+
+router.post(
+  '/admin/gallery/photos',
+  requireAuth,
+  requireAdmin,
+  uploadGalleryPhoto,
+  h(async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: '업로드할 사진을 선택하세요.' })
+    const alt = (req.body.alt || '').trim() || null
+    const photo = await db.createGalleryPhoto({
+      imageUrl: `/gallery-photos/${req.file.filename}`,
+      alt,
+      createdBy: req.member.id,
+    })
+    res.status(201).json({ photo })
+  })
+)
+
+router.delete(
+  '/admin/gallery/photos/:id',
+  requireAuth,
+  requireAdmin,
+  h(async (req, res) => {
+    const photo = await db.getGalleryPhotoById(req.params.id)
+    if (!photo) return res.status(404).json({ error: '사진을 찾을 수 없습니다.' })
+    await db.deleteGalleryPhoto(photo.id)
+    const filename = photo.imageUrl.replace('/gallery-photos/', '')
+    await fs.promises.unlink(path.join(GALLERY_UPLOAD_DIR, filename)).catch(() => {})
+    res.json({ ok: true })
+  })
+)
+
+router.post(
+  '/admin/gallery/videos',
+  requireAuth,
+  requireAdmin,
+  h(async (req, res) => {
+    const title = (req.body?.title || '').trim()
+    const youtubeId = extractYoutubeId(req.body?.youtubeUrl)
+    if (!title) return res.status(400).json({ error: '제목을 입력하세요.' })
+    if (!youtubeId) return res.status(400).json({ error: '유효한 유튜브 링크 또는 영상 ID를 입력하세요.' })
+    const video = await db.createGalleryVideo({ title, youtubeId, createdBy: req.member.id })
+    res.status(201).json({ video })
+  })
+)
+
+router.delete(
+  '/admin/gallery/videos/:id',
+  requireAuth,
+  requireAdmin,
+  h(async (req, res) => {
+    const video = await db.getGalleryVideoById(req.params.id)
+    if (!video) return res.status(404).json({ error: '영상을 찾을 수 없습니다.' })
+    await db.deleteGalleryVideo(video.id)
+    res.json({ ok: true })
+  })
+)
+
+// ---- Admin: performance schedule management ----
+
+router.post(
+  '/admin/performances',
+  requireAuth,
+  requireAdmin,
+  uploadPoster,
+  h(async (req, res) => {
+    const { title, date, time, venue, program, description } = req.body || {}
+    if (!title || !date) {
+      if (req.file) await fs.promises.unlink(req.file.path).catch(() => {})
+      return res.status(400).json({ error: '제목과 날짜를 입력하세요.' })
+    }
+    const performance = await db.createPerformance({
+      title,
+      date,
+      time: time || null,
+      venue: venue || null,
+      program: program || null,
+      description: description || null,
+      posterUrl: req.file ? `/posters/${req.file.filename}` : null,
+      createdBy: req.member.id,
+    })
+    res.status(201).json({ performance })
+  })
+)
+
+router.put(
+  '/admin/performances/:id',
+  requireAuth,
+  requireAdmin,
+  uploadPoster,
+  h(async (req, res) => {
+    const existing = await db.getPerformanceById(req.params.id)
+    if (!existing) {
+      if (req.file) await fs.promises.unlink(req.file.path).catch(() => {})
+      return res.status(404).json({ error: '공연을 찾을 수 없습니다.' })
+    }
+
+    const body = req.body || {}
+    const patch = {}
+    if ('title' in body) patch.title = body.title
+    if ('date' in body) patch.date = body.date
+    if ('time' in body) patch.time = body.time || null
+    if ('venue' in body) patch.venue = body.venue || null
+    if ('program' in body) patch.program = body.program || null
+    if ('description' in body) patch.description = body.description || null
+    if (req.file) patch.posterUrl = `/posters/${req.file.filename}`
+
+    const performance = await db.updatePerformance(req.params.id, patch)
+
+    // Clean up the old poster only if we replaced it with a new upload.
+    if (req.file && existing.posterUrl) {
+      const oldFilename = existing.posterUrl.replace('/posters/', '')
+      await fs.promises.unlink(path.join(POSTER_UPLOAD_DIR, oldFilename)).catch(() => {})
+    }
+
+    res.json({ performance })
+  })
+)
+
+router.delete(
+  '/admin/performances/:id',
+  requireAuth,
+  requireAdmin,
+  h(async (req, res) => {
+    const performance = await db.getPerformanceById(req.params.id)
+    if (!performance) return res.status(404).json({ error: '공연을 찾을 수 없습니다.' })
+    await db.deletePerformance(performance.id)
+    if (performance.posterUrl) {
+      const filename = performance.posterUrl.replace('/posters/', '')
+      await fs.promises.unlink(path.join(POSTER_UPLOAD_DIR, filename)).catch(() => {})
+    }
+    res.json({ ok: true })
   })
 )
 

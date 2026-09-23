@@ -101,6 +101,45 @@ async function initSchema() {
       FOREIGN KEY (uploaded_by) REFERENCES members(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS gallery_photos (
+      id CHAR(36) PRIMARY KEY,
+      image_url VARCHAR(255) NOT NULL,
+      alt VARCHAR(255) NULL,
+      created_by CHAR(36) NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES members(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS gallery_videos (
+      id CHAR(36) PRIMARY KEY,
+      title VARCHAR(200) NOT NULL,
+      youtube_id VARCHAR(32) NOT NULL,
+      created_by CHAR(36) NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES members(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS performances (
+      id CHAR(36) PRIMARY KEY,
+      title VARCHAR(200) NOT NULL,
+      -- Stored as plain 'YYYY-MM-DD' text rather than a DATE column, same
+      -- as schedules.start_at/end_at — sidesteps mysql2's automatic
+      -- Date-object conversion and timezone handling entirely.
+      performance_date VARCHAR(10) NOT NULL,
+      performance_time VARCHAR(20) NULL,
+      venue VARCHAR(200) NULL,
+      program VARCHAR(500) NULL,
+      description TEXT NULL,
+      poster_url VARCHAR(255) NULL,
+      created_by CHAR(36) NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES members(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `)
 }
 
 const ready = initSchema()
@@ -162,6 +201,45 @@ function rowToFile(row) {
     size: row.size,
     uploadedBy: row.uploaded_by,
     createdAt: row.created_at,
+  }
+}
+
+function rowToGalleryPhoto(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    imageUrl: row.image_url,
+    alt: row.alt,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+  }
+}
+
+function rowToGalleryVideo(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    title: row.title,
+    youtubeId: row.youtube_id,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+  }
+}
+
+function rowToPerformance(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    title: row.title,
+    date: row.performance_date,
+    time: row.performance_time,
+    venue: row.venue,
+    program: row.program,
+    description: row.description,
+    posterUrl: row.poster_url,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   }
 }
 
@@ -427,6 +505,117 @@ const db = {
 
   async deleteFile(id) {
     const [result] = await pool.execute('DELETE FROM files WHERE id = ?', [id])
+    return result.affectedRows > 0
+  },
+
+  async getGalleryPhotos() {
+    const [rows] = await pool.query('SELECT * FROM gallery_photos ORDER BY created_at DESC')
+    return rows.map(rowToGalleryPhoto)
+  },
+
+  async getGalleryPhotoById(id) {
+    const [rows] = await pool.execute('SELECT * FROM gallery_photos WHERE id = ?', [id])
+    return rowToGalleryPhoto(rows[0])
+  },
+
+  async createGalleryPhoto({ imageUrl, alt, createdBy }) {
+    const id = crypto.randomUUID()
+    await pool.execute(
+      'INSERT INTO gallery_photos (id, image_url, alt, created_by) VALUES (?, ?, ?, ?)',
+      [id, imageUrl, alt, createdBy]
+    )
+    return db.getGalleryPhotoById(id)
+  },
+
+  async deleteGalleryPhoto(id) {
+    const [result] = await pool.execute('DELETE FROM gallery_photos WHERE id = ?', [id])
+    return result.affectedRows > 0
+  },
+
+  async getGalleryVideos() {
+    const [rows] = await pool.query('SELECT * FROM gallery_videos ORDER BY created_at DESC')
+    return rows.map(rowToGalleryVideo)
+  },
+
+  async getGalleryVideoById(id) {
+    const [rows] = await pool.execute('SELECT * FROM gallery_videos WHERE id = ?', [id])
+    return rowToGalleryVideo(rows[0])
+  },
+
+  async createGalleryVideo({ title, youtubeId, createdBy }) {
+    const id = crypto.randomUUID()
+    await pool.execute(
+      'INSERT INTO gallery_videos (id, title, youtube_id, created_by) VALUES (?, ?, ?, ?)',
+      [id, title, youtubeId, createdBy]
+    )
+    return db.getGalleryVideoById(id)
+  },
+
+  async deleteGalleryVideo(id) {
+    const [result] = await pool.execute('DELETE FROM gallery_videos WHERE id = ?', [id])
+    return result.affectedRows > 0
+  },
+
+  async getPerformances() {
+    const [rows] = await pool.query('SELECT * FROM performances ORDER BY performance_date DESC')
+    return rows.map(rowToPerformance)
+  },
+
+  async getPerformanceById(id) {
+    const [rows] = await pool.execute('SELECT * FROM performances WHERE id = ?', [id])
+    return rowToPerformance(rows[0])
+  },
+
+  async createPerformance({ title, date, time, venue, program, description, posterUrl, createdBy }) {
+    const id = crypto.randomUUID()
+    await pool.execute(
+      `INSERT INTO performances
+         (id, title, performance_date, performance_time, venue, program, description, poster_url, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, title, date, time, venue, program, description, posterUrl, createdBy]
+    )
+    return db.getPerformanceById(id)
+  },
+
+  async updatePerformance(id, patch) {
+    const fields = []
+    const values = []
+    if (patch.title !== undefined) {
+      fields.push('title = ?')
+      values.push(patch.title)
+    }
+    if (patch.date !== undefined) {
+      fields.push('performance_date = ?')
+      values.push(patch.date)
+    }
+    if (patch.time !== undefined) {
+      fields.push('performance_time = ?')
+      values.push(patch.time)
+    }
+    if (patch.venue !== undefined) {
+      fields.push('venue = ?')
+      values.push(patch.venue)
+    }
+    if (patch.program !== undefined) {
+      fields.push('program = ?')
+      values.push(patch.program)
+    }
+    if (patch.description !== undefined) {
+      fields.push('description = ?')
+      values.push(patch.description)
+    }
+    if (patch.posterUrl !== undefined) {
+      fields.push('poster_url = ?')
+      values.push(patch.posterUrl)
+    }
+    if (!fields.length) return db.getPerformanceById(id)
+    values.push(id)
+    await pool.execute(`UPDATE performances SET ${fields.join(', ')} WHERE id = ?`, values)
+    return db.getPerformanceById(id)
+  },
+
+  async deletePerformance(id) {
+    const [result] = await pool.execute('DELETE FROM performances WHERE id = ?', [id])
     return result.affectedRows > 0
   },
 

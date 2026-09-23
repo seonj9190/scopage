@@ -1,8 +1,25 @@
 <script setup>
+import { ref, onMounted } from 'vue'
 import BaseButton from '@/components/BaseButton.vue'
-import { performances } from '@/data/performances.js'
 
-const nextPerformance = performances[0]
+const nextPerformance = ref(null)
+const loading = ref(true)
+
+onMounted(async () => {
+  try {
+    const res = await fetch('/api/public/performances')
+    const data = await res.json()
+    const today = new Date()
+    nextPerformance.value =
+      (data.performances || [])
+        .filter((p) => new Date(p.date) >= today)
+        .sort((a, b) => new Date(a.date) - new Date(b.date))[0] || null
+  } catch {
+    nextPerformance.value = null
+  } finally {
+    loading.value = false
+  }
+})
 </script>
 
 <template>
@@ -30,10 +47,16 @@ const nextPerformance = performances[0]
       <div class="grid gap-10 border-t border-line pt-16 sm:grid-cols-3">
         <div>
           <h2 class="text-sm tracking-[0.2em] text-accent uppercase">Next Concert</h2>
-          <p class="mt-4 text-lg text-ink">{{ nextPerformance.title }}</p>
-          <p class="mt-2 text-sm text-muted">
-            {{ nextPerformance.date }} · {{ nextPerformance.time }} · {{ nextPerformance.venue }}
-          </p>
+          <template v-if="loading">
+            <p class="mt-4 text-sm text-muted">불러오는 중...</p>
+          </template>
+          <template v-else-if="nextPerformance">
+            <p class="mt-4 text-lg text-ink">{{ nextPerformance.title }}</p>
+            <p class="mt-2 text-sm text-muted">
+              {{ nextPerformance.date }} · {{ nextPerformance.time }} · {{ nextPerformance.venue }}
+            </p>
+          </template>
+          <p v-else class="mt-4 text-sm text-muted">예정된 공연이 없습니다.</p>
           <RouterLink to="/performances" class="mt-4 inline-block text-sm text-ink underline underline-offset-4 hover:text-accent">
             전체 일정 보기
           </RouterLink>

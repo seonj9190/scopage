@@ -172,9 +172,13 @@ async function submitProfileEdit(member) {
 
 <template>
   <div class="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
-    <div class="mb-6 flex items-center justify-between">
+    <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
       <h1 class="text-2xl font-light tracking-tight text-ink">멤버 관리</h1>
-      <RouterLink to="/calendar" class="text-sm text-accent hover:underline">캘린더로 돌아가기</RouterLink>
+      <div class="flex items-center gap-3 text-sm">
+        <RouterLink to="/admin/gallery" class="text-accent hover:underline">갤러리 관리</RouterLink>
+        <RouterLink to="/admin/performances" class="text-accent hover:underline">공연 관리</RouterLink>
+        <RouterLink to="/calendar" class="text-accent hover:underline">캘린더로 돌아가기</RouterLink>
+      </div>
     </div>
 
     <p v-if="errorMsg" class="mb-4 text-sm text-rose-600">{{ errorMsg }}</p>
