@@ -83,7 +83,7 @@ router.post(
   '/schedules',
   requireAuth,
   h(async (req, res) => {
-    const { title, start, end, allDay, type, isTeam, memberId } = req.body || {}
+    const { title, start, end, allDay, type, isTeam, memberId, repeatGroupId } = req.body || {}
     if (!title || !start || !end) {
       return res.status(400).json({ error: '제목과 일정 기간을 입력하세요.' })
     }
@@ -111,6 +111,7 @@ router.post(
       allDay,
       type,
       isTeam: req.member.isAdmin ? !!isTeam : false,
+      repeatGroupId: repeatGroupId || null,
     })
     res.status(201).json({ schedule })
   })
@@ -119,6 +120,54 @@ router.post(
 function canModify(req, schedule) {
   return schedule && (schedule.memberId === req.member.id || req.member.isAdmin)
 }
+
+// Registered before /schedules/:id so "group" isn't swallowed as an id.
+router.put(
+  '/schedules/group/:groupId',
+  requireAuth,
+  h(async (req, res) => {
+    const groupSchedules = await db.getSchedulesByGroup(req.params.groupId)
+    if (!groupSchedules.length) return res.status(404).json({ error: '반복 일정을 찾을 수 없습니다.' })
+    if (!groupSchedules.every((s) => canModify(req, s))) {
+      return res.status(403).json({ error: '수정 권한이 없습니다.' })
+    }
+
+    const { title, type, isTeam, memberId, allDay, startTime, endTime } = req.body || {}
+    if (type && type !== 'fixed' && type !== 'flexible') {
+      return res.status(400).json({ error: '일정 유형이 올바르지 않습니다.' })
+    }
+
+    // Date/time-of-day is per-occurrence, so only fields shared across the
+    // whole series are bulk-editable here.
+    const patch = { title, type, allDay, startTime, endTime }
+    if (req.member.isAdmin) {
+      if (typeof isTeam === 'boolean') patch.isTeam = isTeam
+      if (memberId) {
+        const target = await db.getMemberById(memberId)
+        if (!target) return res.status(400).json({ error: '멤버를 찾을 수 없습니다.' })
+        patch.memberId = target.id
+      }
+    }
+
+    await db.reassignGroupFields(req.params.groupId, patch)
+    res.json({ schedules: await db.getSchedulesByGroup(req.params.groupId) })
+  })
+)
+
+router.delete(
+  '/schedules/group/:groupId',
+  requireAuth,
+  h(async (req, res) => {
+    const groupSchedules = await db.getSchedulesByGroup(req.params.groupId)
+    if (!groupSchedules.length) return res.status(404).json({ error: '반복 일정을 찾을 수 없습니다.' })
+    if (!groupSchedules.every((s) => canModify(req, s))) {
+      return res.status(403).json({ error: '삭제 권한이 없습니다.' })
+    }
+
+    const count = await db.deleteScheduleGroup(req.params.groupId)
+    res.json({ ok: true, count })
+  })
+)
 
 router.put(
   '/schedules/:id',

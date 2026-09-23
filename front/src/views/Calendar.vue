@@ -226,6 +226,7 @@ function openEdit(schedule) {
 
 function closeModal() {
   modalOpen.value = false
+  groupScopeFor.value = null
 }
 
 const canEditCurrent = computed(() => {
@@ -234,8 +235,8 @@ const canEditCurrent = computed(() => {
   return s && (s.memberId === authState.member?.id || authState.member?.isAdmin)
 })
 
-// Repeat is only offered when creating a new schedule; each occurrence is
-// created as its own independent schedule (no shared series/group).
+// Repeat is only offered when creating a new schedule. Occurrences created
+// together share a repeatGroupId so they can later be bulk-edited/deleted.
 const MAX_OCCURRENCES = 104
 
 function parseDateOnly(str) {
@@ -303,7 +304,7 @@ async function submitForm() {
     return
   }
 
-  const buildPayload = (startDate, endDate) => ({
+  const buildPayload = (startDate, endDate, repeatGroupId) => ({
     title,
     type: form.value.type,
     allDay: form.value.allDay,
@@ -311,6 +312,7 @@ async function submitForm() {
     end: form.value.allDay ? endDate : `${endDate}T${form.value.endTime}`,
     isTeam: form.value.isTeam,
     memberId: form.value.assignedMemberId,
+    ...(repeatGroupId ? { repeatGroupId } : {}),
   })
 
   try {
@@ -320,10 +322,74 @@ async function submitForm() {
         body: JSON.stringify(buildPayload(form.value.startDate, form.value.endDate)),
       })
     } else {
+      const repeatGroupId = occurrences.length > 1 ? crypto.randomUUID() : null
       for (const occ of occurrences) {
-        await api('/schedules', { method: 'POST', body: JSON.stringify(buildPayload(occ.startDate, occ.endDate)) })
+        await api('/schedules', {
+          method: 'POST',
+          body: JSON.stringify(buildPayload(occ.startDate, occ.endDate, repeatGroupId)),
+        })
       }
     }
+    closeModal()
+    await loadAll()
+  } catch (err) {
+    errorMsg.value = err.message
+  }
+}
+
+// A repeating schedule prompts for scope ("this one" vs "the whole series")
+// before actually saving/deleting; these two hold the pending action while
+// that choice is shown.
+const groupScopeFor = ref(null) // 'save' | 'delete' | null
+const currentSchedule = computed(() => schedules.value.find((s) => s.id === editingId.value))
+
+function requestSave() {
+  if (editingId.value && currentSchedule.value?.repeatGroupId) {
+    groupScopeFor.value = 'save'
+    return
+  }
+  submitForm()
+}
+
+function requestDelete() {
+  if (currentSchedule.value?.repeatGroupId) {
+    groupScopeFor.value = 'delete'
+    return
+  }
+  removeCurrent()
+}
+
+async function confirmScope(scope) {
+  const action = groupScopeFor.value
+  groupScopeFor.value = null
+  if (action === 'save') {
+    await (scope === 'all' ? submitFormToGroup() : submitForm())
+  } else if (action === 'delete') {
+    await (scope === 'all' ? removeGroup() : removeCurrent())
+  }
+}
+
+async function submitFormToGroup() {
+  const title = form.value.title.trim()
+  if (!title) {
+    errorMsg.value = '제목을 입력하세요.'
+    return
+  }
+  const groupId = currentSchedule.value?.repeatGroupId
+  if (!groupId) return
+  try {
+    await api(`/schedules/group/${groupId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        title,
+        type: form.value.type,
+        isTeam: form.value.isTeam,
+        memberId: form.value.assignedMemberId,
+        allDay: form.value.allDay,
+        startTime: form.value.startTime,
+        endTime: form.value.endTime,
+      }),
+    })
     closeModal()
     await loadAll()
   } catch (err) {
@@ -336,6 +402,19 @@ async function removeCurrent() {
   if (!confirm('이 일정을 삭제할까요?')) return
   try {
     await api(`/schedules/${editingId.value}`, { method: 'DELETE' })
+    closeModal()
+    await loadAll()
+  } catch (err) {
+    errorMsg.value = err.message
+  }
+}
+
+async function removeGroup() {
+  const groupId = currentSchedule.value?.repeatGroupId
+  if (!groupId) return
+  if (!confirm('반복되는 모든 일정을 삭제할까요? 되돌릴 수 없습니다.')) return
+  try {
+    await api(`/schedules/group/${groupId}`, { method: 'DELETE' })
     closeModal()
     await loadAll()
   } catch (err) {
@@ -543,7 +622,10 @@ function editFromDayList(schedule) {
         <div v-if="!canEditCurrent" class="mb-4 text-sm text-muted">
           다른 멤버의 일정입니다. 본인 또는 관리자만 수정/삭제할 수 있습니다.
         </div>
-        <form class="space-y-4" @submit.prevent="submitForm">
+        <p v-if="currentSchedule?.repeatGroupId" class="mb-4 text-xs text-muted">
+          반복 등록된 일정입니다. 저장/삭제 시 이 일정만 바꿀지, 반복되는 모든 일정에 적용할지 선택하게 됩니다.
+        </p>
+        <form class="space-y-4" @submit.prevent="requestSave">
           <div>
             <label class="mb-1 block text-xs text-muted">제목</label>
             <input
@@ -641,12 +723,36 @@ function editFromDayList(schedule) {
             </div>
           </div>
 
-          <div class="flex items-center justify-between pt-2">
+          <div v-if="groupScopeFor" class="border-t border-line pt-3">
+            <p class="mb-2 text-sm text-ink">
+              {{ groupScopeFor === 'save' ? '변경 사항을' : '삭제를' }} 어디까지 적용할까요?
+            </p>
+            <div class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                class="border border-line px-3 py-1.5 text-sm hover:bg-accent-soft"
+                @click="confirmScope('this')"
+              >
+                이 일정만
+              </button>
+              <button
+                type="button"
+                class="border border-line px-3 py-1.5 text-sm hover:bg-accent-soft"
+                @click="confirmScope('all')"
+              >
+                반복되는 모든 일정
+              </button>
+              <button type="button" class="ml-auto text-sm text-muted hover:underline" @click="groupScopeFor = null">
+                취소
+              </button>
+            </div>
+          </div>
+          <div v-else class="flex items-center justify-between pt-2">
             <button
               v-if="editingId && canEditCurrent"
               type="button"
               class="text-sm text-rose-600 hover:underline"
-              @click="removeCurrent"
+              @click="requestDelete"
             >
               삭제
             </button>

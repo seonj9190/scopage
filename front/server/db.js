@@ -97,6 +97,10 @@ async function initSchema() {
   // Existing deployments created the table before is_team existed —
   // add it if this is an upgrade rather than a fresh install.
   await ensureColumn('schedules', 'is_team', 'is_team TINYINT(1) NOT NULL DEFAULT 0')
+  // Links occurrences created together from one "반복" (repeat) selection,
+  // so they can be bulk-edited or bulk-deleted as a series. NULL for a
+  // one-off schedule.
+  await ensureColumn('schedules', 'repeat_group_id', 'repeat_group_id CHAR(36) NULL')
   await pool.query(`
     CREATE TABLE IF NOT EXISTS folders (
       id CHAR(36) PRIMARY KEY,
@@ -157,6 +161,7 @@ function rowToSchedule(row) {
     allDay: !!row.all_day,
     type: row.type,
     isTeam: !!row.is_team,
+    repeatGroupId: row.repeat_group_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -371,11 +376,11 @@ const db = {
     return rowToSchedule(rows[0])
   },
 
-  async createSchedule({ memberId, title, start, end, allDay, type, isTeam = false }) {
+  async createSchedule({ memberId, title, start, end, allDay, type, isTeam = false, repeatGroupId = null }) {
     const id = crypto.randomUUID()
     await pool.execute(
-      'INSERT INTO schedules (id, member_id, title, start_at, end_at, all_day, type, is_team) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, memberId, title, start, end, allDay ? 1 : 0, type, isTeam ? 1 : 0]
+      'INSERT INTO schedules (id, member_id, title, start_at, end_at, all_day, type, is_team, repeat_group_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, memberId, title, start, end, allDay ? 1 : 0, type, isTeam ? 1 : 0, repeatGroupId]
     )
     return db.getScheduleById(id)
   },
@@ -420,6 +425,62 @@ const db = {
   async deleteSchedule(id) {
     const [result] = await pool.execute('DELETE FROM schedules WHERE id = ?', [id])
     return result.affectedRows > 0
+  },
+
+  async getSchedulesByGroup(groupId) {
+    const [rows] = await pool.execute(
+      'SELECT * FROM schedules WHERE repeat_group_id = ? ORDER BY start_at ASC',
+      [groupId]
+    )
+    return rows.map(rowToSchedule)
+  },
+
+  // Bulk-edits a repeat series. Only fields shared across every occurrence
+  // are accepted (title/type/isTeam/memberId, plus allDay and its time-of-day)
+  // — each row keeps its own date, since that's what makes it "occurrence N"
+  // rather than "occurrence 1".
+  async reassignGroupFields(groupId, patch) {
+    const [rows] = await pool.execute('SELECT * FROM schedules WHERE repeat_group_id = ?', [groupId])
+    await Promise.all(
+      rows.map((row) => {
+        const fields = []
+        const values = []
+        if (patch.title !== undefined) {
+          fields.push('title = ?')
+          values.push(patch.title)
+        }
+        if (patch.type !== undefined) {
+          fields.push('type = ?')
+          values.push(patch.type)
+        }
+        if (patch.isTeam !== undefined) {
+          fields.push('is_team = ?')
+          values.push(patch.isTeam ? 1 : 0)
+        }
+        if (patch.memberId !== undefined) {
+          fields.push('member_id = ?')
+          values.push(patch.memberId)
+        }
+        if (patch.allDay !== undefined) {
+          const startDate = row.start_at.slice(0, 10)
+          const endDate = row.end_at.slice(0, 10)
+          fields.push('all_day = ?')
+          values.push(patch.allDay ? 1 : 0)
+          fields.push('start_at = ?')
+          values.push(patch.allDay ? startDate : `${startDate}T${patch.startTime}`)
+          fields.push('end_at = ?')
+          values.push(patch.allDay ? endDate : `${endDate}T${patch.endTime}`)
+        }
+        if (!fields.length) return null
+        values.push(row.id)
+        return pool.execute(`UPDATE schedules SET ${fields.join(', ')} WHERE id = ?`, values)
+      })
+    )
+  },
+
+  async deleteScheduleGroup(groupId) {
+    const [result] = await pool.execute('DELETE FROM schedules WHERE repeat_group_id = ?', [groupId])
+    return result.affectedRows
   },
 
   async getFolders() {
