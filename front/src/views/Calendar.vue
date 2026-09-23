@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuth } from '@/auth'
 
@@ -9,6 +9,49 @@ const members = ref([])
 const schedules = ref([])
 const loading = ref(true)
 const errorMsg = ref('')
+
+// ---- Live updates: poll so other members' changes show up without a
+// manual refresh, and track what's new since this member last looked. ----
+const POLL_INTERVAL_MS = 30000
+const LAST_SEEN_KEY_PREFIX = 'scopage_calendar_last_seen_'
+let pollTimer = null
+const lastSeenAt = ref(0)
+
+function lastSeenKey() {
+  return authState.member?.id ? `${LAST_SEEN_KEY_PREFIX}${authState.member.id}` : null
+}
+
+function loadLastSeen() {
+  const key = lastSeenKey()
+  if (!key) return
+  try {
+    lastSeenAt.value = Number(localStorage.getItem(key)) || 0
+  } catch {
+    lastSeenAt.value = 0
+  }
+}
+
+// Schedules someone else created or edited since this member's last visit —
+// excludes the member's own changes, since those don't need announcing.
+const newChanges = computed(() =>
+  schedules.value.filter((s) => {
+    if (s.memberId === authState.member?.id) return false
+    const changedAt = new Date(s.updatedAt || s.createdAt).getTime()
+    return changedAt > lastSeenAt.value
+  })
+)
+
+function dismissNewChanges() {
+  const key = lastSeenKey()
+  if (!key) return
+  const now = Date.now()
+  lastSeenAt.value = now
+  try {
+    localStorage.setItem(key, String(now))
+  } catch {
+    // per-viewer convenience only — fine if it can't persist
+  }
+}
 
 const today = new Date()
 const viewYear = ref(today.getFullYear())
@@ -105,21 +148,31 @@ function goToday() {
   viewMonth.value = today.getMonth()
 }
 
-async function loadAll() {
-  loading.value = true
-  errorMsg.value = ''
+// `silent` skips the loading spinner and error banner — used for the
+// background poll so it doesn't flicker the page every 30s.
+async function loadAll({ silent = false } = {}) {
+  if (!silent) loading.value = true
+  if (!silent) errorMsg.value = ''
   try {
     const [membersRes, schedulesRes] = await Promise.all([api('/members'), api('/schedules')])
     members.value = membersRes.members
     schedules.value = schedulesRes.schedules
   } catch (err) {
-    errorMsg.value = err.message
+    if (!silent) errorMsg.value = err.message
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
 }
 
-onMounted(loadAll)
+onMounted(() => {
+  loadLastSeen()
+  loadAll()
+  pollTimer = setInterval(() => loadAll({ silent: true }), POLL_INTERVAL_MS)
+})
+
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer)
+})
 
 // ---- Create / edit modal ----
 
@@ -351,6 +404,14 @@ function editFromDayList(schedule) {
         </RouterLink>
         <button type="button" class="text-muted hover:text-ink" @click="logout">로그아웃</button>
       </div>
+    </div>
+
+    <div
+      v-if="newChanges.length"
+      class="mb-4 flex items-center justify-between gap-3 border border-accent/40 bg-accent-soft px-4 py-2 text-sm text-ink"
+    >
+      <span>다른 멤버가 등록하거나 수정한 일정이 {{ newChanges.length }}건 있습니다.</span>
+      <button type="button" class="shrink-0 text-accent hover:underline" @click="dismissNewChanges">확인</button>
     </div>
 
     <p v-if="errorMsg" class="mb-4 text-sm text-rose-600">{{ errorMsg }}</p>
