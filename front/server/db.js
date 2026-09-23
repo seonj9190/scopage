@@ -22,15 +22,20 @@ const pool = mysql.createPool({
   charset: 'utf8mb4',
 })
 
+// Returns true if the column already existed, false if it was just added —
+// callers use this to run one-off backfills only on the migration that adds
+// the column.
 async function ensureColumn(table, column, definition) {
   const [rows] = await pool.query(
     `SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
     [table, column]
   )
-  if (rows[0].cnt === 0) {
+  const existed = rows[0].cnt > 0
+  if (!existed) {
     await pool.query(`ALTER TABLE ${table} ADD COLUMN ${definition}`)
   }
+  return existed
 }
 
 async function initSchema() {
@@ -58,8 +63,22 @@ async function initSchema() {
   await ensureColumn('members', 'bio1', 'bio1 VARCHAR(500) NULL')
   await ensureColumn('members', 'bio2', 'bio2 VARCHAR(500) NULL')
   await ensureColumn('members', 'photo_url', 'photo_url VARCHAR(255) NULL')
+  await ensureColumn('members', 'thumbnail_url', 'thumbnail_url VARCHAR(255) NULL')
   await ensureColumn('members', 'is_conductor', 'is_conductor TINYINT(1) NOT NULL DEFAULT 0')
   await ensureColumn('members', 'is_public', 'is_public TINYINT(1) NOT NULL DEFAULT 0')
+  const hadDisplayOrder = await ensureColumn('members', 'display_order', 'display_order INT NOT NULL DEFAULT 0')
+  if (!hadDisplayOrder) {
+    // Backfill existing rows so the roster order doesn't change until an
+    // admin deliberately reorders it — mirrors the old implicit ordering.
+    await pool.query(`
+      UPDATE members
+      JOIN (
+        SELECT id, ROW_NUMBER() OVER (ORDER BY created_at ASC, username ASC) AS rn
+        FROM members
+      ) ranked ON ranked.id = members.id
+      SET members.display_order = ranked.rn
+    `)
+  }
   await pool.query(`
     CREATE TABLE IF NOT EXISTS schedules (
       id CHAR(36) PRIMARY KEY,
@@ -78,6 +97,10 @@ async function initSchema() {
   // Existing deployments created the table before is_team existed —
   // add it if this is an upgrade rather than a fresh install.
   await ensureColumn('schedules', 'is_team', 'is_team TINYINT(1) NOT NULL DEFAULT 0')
+  // Links occurrences created together from one "반복" (repeat) selection,
+  // so they can be bulk-edited or bulk-deleted as a series. NULL for a
+  // one-off schedule.
+  await ensureColumn('schedules', 'repeat_group_id', 'repeat_group_id CHAR(36) NULL')
   await pool.query(`
     CREATE TABLE IF NOT EXISTS folders (
       id CHAR(36) PRIMARY KEY,
@@ -158,8 +181,10 @@ function rowToMember(row) {
     bio1: row.bio1,
     bio2: row.bio2,
     photoUrl: row.photo_url,
+    thumbnailUrl: row.thumbnail_url,
     isPublic: !!row.is_public,
     isConductor: !!row.is_conductor,
+    displayOrder: row.display_order,
     createdAt: row.created_at,
   }
 }
@@ -175,6 +200,7 @@ function rowToSchedule(row) {
     allDay: !!row.all_day,
     type: row.type,
     isTeam: !!row.is_team,
+    repeatGroupId: row.repeat_group_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -245,7 +271,7 @@ function rowToPerformance(row) {
 
 function publicMember(member) {
   if (!member) return null
-  const { id, username, name, color, isAdmin, isActive, part, bio1, bio2, photoUrl, isPublic, isConductor } = member
+  const { id, username, name, color, isAdmin, isActive, part, bio1, bio2, photoUrl, thumbnailUrl, isPublic, isConductor, displayOrder } = member
   return {
     id,
     username,
@@ -257,8 +283,10 @@ function publicMember(member) {
     bio1,
     bio2,
     photoUrl,
+    thumbnailUrl,
     isPublic: !!isPublic,
     isConductor: !!isConductor,
+    displayOrder,
   }
 }
 
@@ -278,7 +306,7 @@ const db = {
   },
 
   async getMembers() {
-    const [rows] = await pool.query('SELECT * FROM members ORDER BY created_at ASC, username ASC')
+    const [rows] = await pool.query('SELECT * FROM members ORDER BY display_order ASC, created_at ASC, username ASC')
     return rows.map(rowToMember)
   },
 
@@ -302,21 +330,24 @@ const db = {
     bio1 = null,
     bio2 = null,
     photoUrl = null,
+    thumbnailUrl = null,
     isPublic = false,
     isConductor = false,
   }) {
-    const [[{ count }]] = await pool.query('SELECT COUNT(*) AS count FROM members')
+    const [[{ count, maxOrder }]] = await pool.query(
+      'SELECT COUNT(*) AS count, COALESCE(MAX(display_order), 0) AS maxOrder FROM members'
+    )
     const color = COLOR_PALETTE[count % COLOR_PALETTE.length]
     const id = crypto.randomUUID()
     try {
       await pool.execute(
         `INSERT INTO members
-           (id, username, password_hash, name, color, is_admin, is_active, part, bio1, bio2, photo_url, is_public, is_conductor)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (id, username, password_hash, name, color, is_admin, is_active, part, bio1, bio2, photo_url, thumbnail_url, is_public, is_conductor, display_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id, username, passwordHash, name, color,
-          isAdmin ? 1 : 0, isActive ? 1 : 0, part, bio1, bio2, photoUrl,
-          isPublic ? 1 : 0, isConductor ? 1 : 0,
+          isAdmin ? 1 : 0, isActive ? 1 : 0, part, bio1, bio2, photoUrl, thumbnailUrl,
+          isPublic ? 1 : 0, isConductor ? 1 : 0, maxOrder + 1,
         ]
       )
     } catch (err) {
@@ -365,6 +396,10 @@ const db = {
       fields.push('photo_url = ?')
       values.push(patch.photoUrl)
     }
+    if (patch.thumbnailUrl !== undefined) {
+      fields.push('thumbnail_url = ?')
+      values.push(patch.thumbnailUrl)
+    }
     if (patch.isPublic !== undefined) {
       fields.push('is_public = ?')
       values.push(patch.isPublic ? 1 : 0)
@@ -395,8 +430,18 @@ const db = {
     // is_active only gates login capability, not this — a profile-only
     // entry (never meant to log in) still belongs on the public roster.
     // Admins control public visibility solely through is_public.
-    const [rows] = await pool.query('SELECT * FROM members WHERE is_public = 1 ORDER BY created_at ASC')
+    const [rows] = await pool.query('SELECT * FROM members WHERE is_public = 1 ORDER BY display_order ASC, created_at ASC')
     return rows.map(rowToMember)
+  },
+
+  // Applies an admin-chosen display order: `orderedIds` is the full member
+  // list in its new order, so a member's position is just its index in it.
+  async reorderMembers(orderedIds) {
+    await Promise.all(
+      orderedIds.map((id, index) =>
+        pool.execute('UPDATE members SET display_order = ? WHERE id = ?', [index + 1, id])
+      )
+    )
   },
 
   async getSchedules() {
@@ -409,11 +454,11 @@ const db = {
     return rowToSchedule(rows[0])
   },
 
-  async createSchedule({ memberId, title, start, end, allDay, type, isTeam = false }) {
+  async createSchedule({ memberId, title, start, end, allDay, type, isTeam = false, repeatGroupId = null }) {
     const id = crypto.randomUUID()
     await pool.execute(
-      'INSERT INTO schedules (id, member_id, title, start_at, end_at, all_day, type, is_team) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, memberId, title, start, end, allDay ? 1 : 0, type, isTeam ? 1 : 0]
+      'INSERT INTO schedules (id, member_id, title, start_at, end_at, all_day, type, is_team, repeat_group_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, memberId, title, start, end, allDay ? 1 : 0, type, isTeam ? 1 : 0, repeatGroupId]
     )
     return db.getScheduleById(id)
   },
@@ -458,6 +503,62 @@ const db = {
   async deleteSchedule(id) {
     const [result] = await pool.execute('DELETE FROM schedules WHERE id = ?', [id])
     return result.affectedRows > 0
+  },
+
+  async getSchedulesByGroup(groupId) {
+    const [rows] = await pool.execute(
+      'SELECT * FROM schedules WHERE repeat_group_id = ? ORDER BY start_at ASC',
+      [groupId]
+    )
+    return rows.map(rowToSchedule)
+  },
+
+  // Bulk-edits a repeat series. Only fields shared across every occurrence
+  // are accepted (title/type/isTeam/memberId, plus allDay and its time-of-day)
+  // — each row keeps its own date, since that's what makes it "occurrence N"
+  // rather than "occurrence 1".
+  async reassignGroupFields(groupId, patch) {
+    const [rows] = await pool.execute('SELECT * FROM schedules WHERE repeat_group_id = ?', [groupId])
+    await Promise.all(
+      rows.map((row) => {
+        const fields = []
+        const values = []
+        if (patch.title !== undefined) {
+          fields.push('title = ?')
+          values.push(patch.title)
+        }
+        if (patch.type !== undefined) {
+          fields.push('type = ?')
+          values.push(patch.type)
+        }
+        if (patch.isTeam !== undefined) {
+          fields.push('is_team = ?')
+          values.push(patch.isTeam ? 1 : 0)
+        }
+        if (patch.memberId !== undefined) {
+          fields.push('member_id = ?')
+          values.push(patch.memberId)
+        }
+        if (patch.allDay !== undefined) {
+          const startDate = row.start_at.slice(0, 10)
+          const endDate = row.end_at.slice(0, 10)
+          fields.push('all_day = ?')
+          values.push(patch.allDay ? 1 : 0)
+          fields.push('start_at = ?')
+          values.push(patch.allDay ? startDate : `${startDate}T${patch.startTime}`)
+          fields.push('end_at = ?')
+          values.push(patch.allDay ? endDate : `${endDate}T${patch.endTime}`)
+        }
+        if (!fields.length) return null
+        values.push(row.id)
+        return pool.execute(`UPDATE schedules SET ${fields.join(', ')} WHERE id = ?`, values)
+      })
+    )
+  },
+
+  async deleteScheduleGroup(groupId) {
+    const [result] = await pool.execute('DELETE FROM schedules WHERE repeat_group_id = ?', [groupId])
+    return result.affectedRows
   },
 
   async getFolders() {

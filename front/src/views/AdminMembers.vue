@@ -26,6 +26,7 @@ function emptyCreateForm() {
 
 const form = ref(emptyCreateForm())
 const createPhotoInput = ref(null)
+const createThumbnailInput = ref(null)
 const creating = ref(false)
 
 async function loadMembers() {
@@ -42,7 +43,7 @@ async function loadMembers() {
 
 onMounted(loadMembers)
 
-function buildMemberFormData(fields, photoFile) {
+function buildMemberFormData(fields, files = {}) {
   const data = new FormData()
   for (const [key, value] of Object.entries(fields)) {
     if (typeof value === 'boolean') {
@@ -51,7 +52,8 @@ function buildMemberFormData(fields, photoFile) {
       data.append(key, value)
     }
   }
-  if (photoFile) data.append('photo', photoFile)
+  if (files.photo) data.append('photo', files.photo)
+  if (files.thumbnail) data.append('thumbnail', files.thumbnail)
   return data
 }
 
@@ -60,16 +62,47 @@ async function createMember() {
   successMsg.value = ''
   creating.value = true
   try {
-    const data = buildMemberFormData(form.value, createPhotoInput.value?.files?.[0])
+    const data = buildMemberFormData(form.value, {
+      photo: createPhotoInput.value?.files?.[0],
+      thumbnail: createThumbnailInput.value?.files?.[0],
+    })
     await api('/admin/members', { method: 'POST', body: data })
     successMsg.value = `${form.value.name}님 계정이 생성되었습니다.`
     form.value = emptyCreateForm()
     if (createPhotoInput.value) createPhotoInput.value.value = ''
+    if (createThumbnailInput.value) createThumbnailInput.value.value = ''
     await loadMembers()
   } catch (err) {
     errorMsg.value = err.message
   } finally {
     creating.value = false
+  }
+}
+
+const reordering = ref(false)
+
+async function moveMember(member, direction) {
+  const index = members.value.findIndex((m) => m.id === member.id)
+  const swapWith = index + direction
+  if (swapWith < 0 || swapWith >= members.value.length) return
+
+  const reordered = [...members.value]
+  ;[reordered[index], reordered[swapWith]] = [reordered[swapWith], reordered[index]]
+  members.value = reordered
+
+  reordering.value = true
+  errorMsg.value = ''
+  try {
+    const { members: updated } = await api('/admin/members/order', {
+      method: 'PUT',
+      body: JSON.stringify({ orderedIds: reordered.map((m) => m.id) }),
+    })
+    members.value = updated
+  } catch (err) {
+    errorMsg.value = err.message
+    await loadMembers()
+  } finally {
+    reordering.value = false
   }
 }
 
@@ -134,6 +167,7 @@ async function toggleActive(member) {
 const editProfileFor = ref(null)
 const profileForm = ref({ part: '', bio1: '', bio2: '', isPublic: false, isConductor: false })
 const editPhotoInput = ref(null)
+const editThumbnailInput = ref(null)
 const savingProfile = ref(false)
 
 function openProfileEdit(member) {
@@ -150,6 +184,7 @@ function openProfileEdit(member) {
 function closeProfileEdit() {
   editProfileFor.value = null
   if (editPhotoInput.value) editPhotoInput.value.value = ''
+  if (editThumbnailInput.value) editThumbnailInput.value.value = ''
 }
 
 async function submitProfileEdit(member) {
@@ -157,7 +192,10 @@ async function submitProfileEdit(member) {
   errorMsg.value = ''
   successMsg.value = ''
   try {
-    const data = buildMemberFormData(profileForm.value, editPhotoInput.value?.files?.[0])
+    const data = buildMemberFormData(profileForm.value, {
+      photo: editPhotoInput.value?.files?.[0],
+      thumbnail: editThumbnailInput.value?.files?.[0],
+    })
     const { member: updated } = await api(`/admin/members/${member.id}`, { method: 'PUT', body: data })
     Object.assign(member, updated)
     successMsg.value = `${member.name}님 소개 정보를 저장했습니다.`
@@ -197,7 +235,12 @@ async function submitProfileEdit(member) {
 
         <input v-model="form.part" type="text" placeholder="파트 (예: 바이올린)" class="border border-line px-3 py-2 text-sm" />
         <div>
+          <label class="mb-1 block text-xs text-muted">프로필 사진</label>
           <input ref="createPhotoInput" type="file" accept="image/*" class="w-full text-sm" />
+        </div>
+        <div class="sm:col-span-2">
+          <label class="mb-1 block text-xs text-muted">캘린더 썸네일 (선택 — 캘린더에서 이름 대신 표시)</label>
+          <input ref="createThumbnailInput" type="file" accept="image/*" class="w-full text-sm" />
         </div>
         <input v-model="form.bio1" type="text" placeholder="소개 1 (선택)" class="border border-line px-3 py-2 text-sm sm:col-span-2" />
         <input v-model="form.bio2" type="text" placeholder="소개 2 (선택)" class="border border-line px-3 py-2 text-sm sm:col-span-2" />
@@ -228,6 +271,22 @@ async function submitProfileEdit(member) {
         <li v-for="m in members" :key="m.id" class="px-4 py-3" :class="!m.isActive ? 'opacity-50' : ''">
           <div class="flex items-center justify-between gap-4">
             <div class="flex items-center gap-3">
+              <div class="flex flex-col">
+                <button
+                  type="button"
+                  class="leading-none text-muted hover:text-ink disabled:opacity-30"
+                  :disabled="reordering || m.id === members[0]?.id"
+                  aria-label="위로 이동"
+                  @click="moveMember(m, -1)"
+                >▲</button>
+                <button
+                  type="button"
+                  class="leading-none text-muted hover:text-ink disabled:opacity-30"
+                  :disabled="reordering || m.id === members[members.length - 1]?.id"
+                  aria-label="아래로 이동"
+                  @click="moveMember(m, 1)"
+                >▼</button>
+              </div>
               <img
                 v-if="m.photoUrl"
                 :src="m.photoUrl"
@@ -289,7 +348,14 @@ async function submitProfileEdit(member) {
             @submit.prevent="submitProfileEdit(m)"
           >
             <input v-model="profileForm.part" type="text" placeholder="파트" class="border border-line px-2 py-1.5 text-sm" />
-            <input ref="editPhotoInput" type="file" accept="image/*" class="text-sm" />
+            <div>
+              <label class="mb-1 block text-xs text-muted">프로필 사진</label>
+              <input :ref="(el) => (editPhotoInput = el)" type="file" accept="image/*" class="text-sm" />
+            </div>
+            <div class="sm:col-span-2">
+              <label class="mb-1 block text-xs text-muted">캘린더 썸네일 (선택 — 캘린더에서 이름 대신 표시)</label>
+              <input :ref="(el) => (editThumbnailInput = el)" type="file" accept="image/*" class="text-sm" />
+            </div>
             <input v-model="profileForm.bio1" type="text" placeholder="소개 1" class="border border-line px-2 py-1.5 text-sm sm:col-span-2" />
             <input v-model="profileForm.bio2" type="text" placeholder="소개 2" class="border border-line px-2 py-1.5 text-sm sm:col-span-2" />
             <label class="inline-flex items-center gap-2 text-xs text-muted">
