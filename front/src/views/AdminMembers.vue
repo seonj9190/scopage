@@ -285,7 +285,7 @@ async function submitProfileEdit(member) {
             @submit.prevent="submitProfileEdit(m)"
           >
             <input v-model="profileForm.part" type="text" placeholder="파트" class="border border-line px-2 py-1.5 text-sm" />
-            <input ref="editPhotoInput" type="file" accept="image/*" class="text-sm" />
+            <input :ref="(el) => (editPhotoInput = el)" type="file" accept="image/*" class="text-sm" />
             <input v-model="profileForm.bio1" type="text" placeholder="소개 1" class="border border-line px-2 py-1.5 text-sm sm:col-span-2" />
             <input v-model="profileForm.bio2" type="text" placeholder="소개 2" class="border border-line px-2 py-1.5 text-sm sm:col-span-2" />
             <label class="inline-flex items-center gap-2 text-xs text-muted">
