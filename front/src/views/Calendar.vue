@@ -74,6 +74,26 @@ const monthLabel = computed(() => `${viewYear.value}년 ${viewMonth.value + 1}�
 
 const membersById = computed(() => Object.fromEntries(members.value.map((m) => [m.id, m])))
 
+// ---- Member contacts ----
+// Each member's login ID is their phone number; format it for display and
+// keep the bare digits for the tel: link. Returns null for IDs that aren't
+// phone numbers (e.g. migrated "legacy-…" accounts) so they're left out.
+function formatPhone(raw) {
+  const digits = String(raw || '').replace(/\D/g, '')
+  if (digits.length === 11) return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`
+  if (digits.length === 10 && digits.startsWith('02')) return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6)}`
+  if (digits.length === 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`
+  if (digits.length === 9 && digits.startsWith('02')) return `${digits.slice(0, 2)}-${digits.slice(2, 5)}-${digits.slice(5)}`
+  return null
+}
+
+const memberContacts = computed(() =>
+  members.value
+    .filter((m) => m.isActive)
+    .map((m) => ({ ...m, phone: formatPhone(m.username), telDigits: String(m.username).replace(/\D/g, '') }))
+    .filter((m) => m.phone)
+)
+
 function toDateOnly(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
@@ -577,6 +597,44 @@ function editFromDayList(schedule) {
     <p class="mt-4 text-xs text-muted">
       실선 배경은 <strong>변경 불가</strong> 일정, 점선 테두리는 <strong>변경 가능</strong> 일정입니다.
     </p>
+
+    <!-- Member contacts -->
+    <section v-if="!loading && memberContacts.length" class="mt-10">
+      <h2 class="mb-3 text-xl text-ink">단원 연락처</h2>
+      <table class="w-full border border-line text-lg text-ink">
+        <thead class="bg-accent-soft text-[16px] text-muted">
+          <tr>
+            <th class="border-b border-line px-4 py-3 text-left font-normal">이름</th>
+            <th class="border-b border-line px-4 py-3 text-left font-normal">연락처</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-line">
+          <tr v-for="m in memberContacts" :key="m.id">
+            <td class="px-4 py-3">
+              <span class="inline-flex items-center gap-2 font-medium">
+                <span class="h-3 w-3 shrink-0 rounded-full" :style="{ backgroundColor: m.color || '#888' }" />
+                {{ m.name }}
+              </span>
+            </td>
+            <td class="px-4 py-3">
+              <div class="flex flex-wrap items-center gap-3">
+                <span class="font-medium tabular-nums tracking-wide">{{ m.phone }}</span>
+                <a
+                  :href="`tel:${m.telDigits}`"
+                  class="inline-flex items-center gap-1.5 bg-ink px-4 py-2 text-[16px] text-white hover:bg-accent"
+                  :aria-label="`${m.name}에게 전화 걸기`"
+                >
+                  <svg viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+                    <path d="M2 3.5A1.5 1.5 0 013.5 2h2.1a1.5 1.5 0 011.46 1.15l.6 2.5a1.5 1.5 0 01-.43 1.44l-1.2 1.13a11 11 0 005.75 5.75l1.13-1.2a1.5 1.5 0 011.44-.43l2.5.6A1.5 1.5 0 0118 14.4v2.1a1.5 1.5 0 01-1.5 1.5h-1C8.04 18 2 11.96 2 4.5v-1z" />
+                  </svg>
+                  전화
+                </a>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
 
     <!-- Day list modal -->
     <div v-if="dayListOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" @click.self="closeDayList">
